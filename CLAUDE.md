@@ -224,7 +224,7 @@ LLM API key 查找顺序：
 
 Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agentskills.io) 开放标准。每个 skill 是一个文件夹，包含 `SKILL.md`（YAML frontmatter + 指令）。
 
-**现有 skills（21 个）：**
+**现有 skills（22 个）：**
 
 知识库管理：
 - `search` — 文献搜索（关键词 / 语义 / 作者 / 融合检索 / 高引排行）
@@ -236,6 +236,7 @@ Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agents
 - `graph` — 引用图谱查询
 - `citations` — 引用量查询和补查
 - `index` — 重建 FTS5 / FAISS 索引
+- `workspace` — 工作区管理（创建 / 添加 / 搜索 / 导出）
 - `export` — BibTeX 导出
 - `import` — Endnote / Zotero 导入
 - `rename` — 论文文件重命名

@@ -227,7 +227,7 @@ Default LLM backend: DeepSeek (`deepseek-chat`), OpenAI-compatible protocol.
 
 Skills are defined in `.claude/skills/` directory (also discoverable via `.agents/skills/` symlink), following the [Agent Skills](https://agentskills.io) open standard. Each skill is a folder containing a `SKILL.md` file (YAML frontmatter + instructions).
 
-**Available skills (21):**
+**Available skills (22):**
 
 Knowledge base management:
 - `search` — Literature search (keyword / semantic / author / hybrid retrieval / top-cited ranking)
@@ -239,6 +239,7 @@ Knowledge base management:
 - `graph` — Citation graph queries
 - `citations` — Citation count queries and refresh
 - `index` — Rebuild FTS5 / FAISS indexes
+- `workspace` — Workspace management (create / add / search / export)
 - `export` — BibTeX export
 - `import` — Endnote / Zotero import
 - `rename` — Paper file renaming

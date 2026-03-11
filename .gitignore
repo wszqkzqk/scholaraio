@@ -1,6 +1,7 @@
 # Data & index (not tracked)
 data/
 workspace/
+!.claude/skills/workspace/
 
 # Python
 __pycache__/
