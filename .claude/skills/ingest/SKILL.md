@@ -1,6 +1,6 @@
 ---
 name: ingest
-description: Ingest papers from inbox into the knowledge base. Runs the pipeline to convert PDFs via MinerU, extract metadata, deduplicate by DOI, and build indexes. Use when the user has new papers to process, wants to run the pipeline, or rebuild indexes.
+description: Ingest papers from inbox into the knowledge base. Runs the pipeline to convert PDFs via MinerU (auto-splits long PDFs), extract metadata, deduplicate by DOI, and build indexes. Supports three inboxes - regular papers, theses, and general documents. Use when the user has new papers to process, wants to run the pipeline, or rebuild indexes.
 ---
 
 # 入库论文
@@ -23,17 +23,21 @@ scholaraio pipeline <preset>
 
 可用预设：`full` | `ingest` | `enrich` | `reindex`
 
-3. pipeline 会依次处理两个 inbox 目录：
+3. pipeline 会依次处理三个 inbox 目录：
    - `data/inbox/` — 普通论文（有 DOI 才入库，无 DOI 且非 thesis 转 pending）
    - `data/inbox-thesis/` — 学位论文（跳过 DOI 去重，自动标记 thesis）
+   - `data/inbox-doc/` — 非论文文档（技术报告、讲义、标准等，跳过 DOI 去重，LLM 生成标题/摘要）
 
 4. 无 DOI 论文的处理逻辑：
    - 来自 `data/inbox-thesis/` → 直接标记为 thesis 并入库
+   - 来自 `data/inbox-doc/` → 标记为 document 类型，LLM 生成标题和摘要后入库
    - 来自 `data/inbox/` → LLM 分析判断是否 thesis
      - 是 thesis → 标记并入库
      - 不是 thesis → 转入 `data/pending/` 待人工确认
 
-5. 展示处理结果摘要。
+5. 超长 PDF（>100 页）自动切分为短 PDF 分段转换后合并。
+
+6. 展示处理结果摘要。
 
 ## 示例
 
@@ -42,6 +46,9 @@ scholaraio pipeline <preset>
 
 用户说："把新论文全部处理完，包括提取目录和结论"
 → 执行 `pipeline full`
+
+用户说："我有几份技术报告放在 inbox-doc 里了"
+→ 执行 `pipeline ingest`（pipeline 自动处理三个 inbox 目录）
 
 用户说："重新建索引"
 → 执行 `pipeline reindex`

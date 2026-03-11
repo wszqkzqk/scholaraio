@@ -26,6 +26,7 @@ ingest:
   abstract_llm_mode: verify # off | fallback | verify
   contact_email: null # Crossref polite pool email → config.local.yaml
   mineru_batch_size: 20 # Cloud batch size per request 云端每批文件数上限
+  chunk_page_limit: 100 # Auto-split PDFs exceeding this page count 超长 PDF 自动切分页数阈值
 
 # Semantic embeddings 语义向量
 embed:

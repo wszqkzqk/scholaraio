@@ -1,19 +1,54 @@
 ---
 name: explore
-description: Explore journals by fetching all papers from OpenAlex, building local embeddings, running BERTopic clustering, and FAISS semantic search. Data is isolated in data/explore/<name>/. Use when the user wants to survey a journal, discover research trends in a specific publication, or do landscape analysis.
+description: Explore literature by fetching papers from OpenAlex with multi-dimensional filters (ISSN, concept, author, institution, keyword, etc.), building local embeddings, running BERTopic clustering, and multi-mode search (semantic/keyword/unified). Data is isolated in data/explore/<name>/. Use when the user wants to survey a journal, explore a research field, analyze an author's output, or do landscape analysis.
 ---
 
-# 期刊探索
+# 多维文献探索
 
-从 OpenAlex 拉取期刊全量论文，本地嵌入 + BERTopic 聚类，用于文献调研。数据与主库完全隔离。
+从 OpenAlex 拉取文献（支持多维过滤），本地嵌入 + BERTopic 聚类 + 多模式搜索，用于文献调研。数据与主库完全隔离。
 
 ## 执行逻辑
 
-### 拉取期刊论文
+### 拉取论文
+
+支持多种过滤维度，可任意组合：
 
 ```bash
+# 按期刊 ISSN
 scholaraio explore fetch --issn <ISSN> --name <名称> [--year-range <起-止>]
+
+# 按研究概念
+scholaraio explore fetch --concept <OpenAlex-concept-ID> --name <名称>
+
+# 按作者
+scholaraio explore fetch --author <OpenAlex-author-ID> --name <名称>
+
+# 按机构
+scholaraio explore fetch --institution <OpenAlex-institution-ID> --name <名称>
+
+# 按关键词
+scholaraio explore fetch --keyword "acoustic metamaterial" --name <名称>
+
+# 多维组合 + 高引过滤
+scholaraio explore fetch --institution I123 --year-range 2020-2025 --min-citations 50 --name <名称>
+
+# 增量更新（追加新论文，DOI 去重）
+scholaraio explore fetch --issn 0022-1120 --name jfm --incremental
 ```
+
+全部过滤参数：
+- `--issn` — 期刊 ISSN
+- `--concept` — OpenAlex concept ID
+- `--topic-id` — OpenAlex topic ID
+- `--author` — OpenAlex author ID
+- `--institution` — OpenAlex institution ID
+- `--keyword` — 标题/摘要关键词搜索
+- `--source-type` — 来源类型（journal/conference/repository）
+- `--oa-type` — 论文类型（article/review 等）
+- `--min-citations` — 最小引用量
+- `--year-range` — 年份过滤（如 2020-2025）
+- `--name` — 探索库名称（默认从 filter 推导）
+- `--incremental` — 增量更新模式
 
 常用期刊 ISSN：
 - JFM (Journal of Fluid Mechanics): 0022-1120
@@ -36,10 +71,17 @@ scholaraio explore topics --name <名称>
 scholaraio explore topics --name <名称> --topic <ID> [--top N]
 ```
 
-### 语义搜索
+### 搜索（三种模式）
 
 ```bash
+# 语义搜索（默认）
 scholaraio explore search --name <名称> "<查询词>" [--top N]
+
+# 关键词搜索（FTS5）
+scholaraio explore search --name <名称> "<查询词>" --mode keyword
+
+# 融合搜索（语义 + 关键词 RRF 排序）
+scholaraio explore search --name <名称> "<查询词>" --mode unified
 ```
 
 ### 生成可视化
@@ -55,18 +97,27 @@ scholaraio explore info
 scholaraio explore info --name <名称>
 ```
 
-对于全新期刊，完整流程是：fetch → embed → topics --build → viz
+对于全新探索库，完整流程是：fetch → embed → topics --build → viz
 
 ## 示例
 
 用户说："帮我拉取 JFM 的全部论文"
 → 执行 `explore fetch --issn 0022-1120 --name jfm`
 
+用户说："帮我看看 acoustic metamaterial 领域有哪些研究"
+→ 执行 `explore fetch --keyword "acoustic metamaterial" --name acoustic-metamaterial`
+
+用户说："拉取某机构近 5 年高引论文"
+→ 执行 `explore fetch --institution I123 --year-range 2020-2025 --min-citations 50 --name inst-highcite`
+
 用户说："在 JFM 里搜 drag reduction"
 → 执行 `explore search --name jfm "drag reduction"`
 
-用户说："生成 JFM 的可视化"
-→ 执行 `explore viz --name jfm`
+用户说："用关键词搜索 JFM 中的 turbulence"
+→ 执行 `explore search --name jfm "turbulence" --mode keyword`
+
+用户说："更新 JFM 探索库"
+→ 执行 `explore fetch --issn 0022-1120 --name jfm --incremental`
 
 用户说："我有哪些探索库"
 → 执行 `explore info`

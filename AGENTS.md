@@ -52,7 +52,7 @@ The above are baseline capabilities. Feel free to combine CLI tools and the codi
 | `vectors.py` | Qwen3 semantic vectors + FAISS incremental indexing |
 | `topics.py` | BERTopic topic modeling + 6 HTML visualizations |
 | `loader.py` | L1-L4 layered loading + enrich_toc + enrich_l3 |
-| `explore.py` | Journal-wide exploration (OpenAlex + embeddings + topics, isolated in `data/explore/`) |
+| `explore.py` | Multi-dimensional literature exploration (OpenAlex multi-filter + FTS5 + semantic + unified search + topics, isolated in `data/explore/`) |
 | `workspace.py` | Workspace paper subset management (reuses search/export) |
 | `export.py` | BibTeX export |
 | `audit.py` | Data quality audit + repair |
@@ -82,10 +82,12 @@ PDF → mineru.py → .md     (or place .md directly to skip MinerU)
                    ↓
              cli.py → skills → coding agent
 
-explore.py — Journal-wide exploration (independent data flow, isolated from main library)
-  OpenAlex API → data/explore/<name>/papers.jsonl
-                 → explore.db (paper_vectors)
+explore.py — Multi-dimensional literature exploration (independent data flow, isolated from main library)
+  OpenAlex API (multi-filter: ISSN/concept/author/institution/keyword/source-type etc.)
+    → data/explore/<name>/papers.jsonl (supports incremental update, DOI-based dedup)
+                 → explore.db (paper_vectors + explore_fts FTS5 full-text index)
                  → faiss.index (FAISS semantic search)
+  Search: semantic / keyword(FTS5) / unified(RRF) — three modes
   Topic modeling/visualization/queries reuse topics.py (via papers_map parameter)
                  → topic_model/ (BERTopic, unified format) + viz/ (HTML)
 
@@ -144,6 +146,23 @@ data/inbox-thesis/
 Note: Papers without DOI in the regular inbox are auto-classified by LLM — if thesis, tagged and ingested; otherwise moved to pending.
 The thesis inbox skips this classification and ingests directly.
 
+### data/inbox-doc/ Directory
+
+```
+data/inbox-doc/
+├── report.pdf    # Non-paper document PDF (technical reports, standards, lecture notes, etc.)
+└── notes.md      # Or place .md directly
+```
+
+Non-paper document ingest flow:
+- Skips DOI dedup and API queries
+- LLM auto-generates title and summary (ensures search indexability)
+- Without LLM, degrades: first markdown heading or filename → title, first 500 words → summary
+- paper_type tagged as `document` (or specific type: `technical-report` / `lecture-notes` / etc.)
+- Audit rules skip `missing_doi` warning for document types
+
+Long PDFs (default >100 pages) are auto-split into shorter PDFs, parsed separately, then merged.
+
 ### data/pending/ Directory
 
 ```
@@ -168,8 +187,8 @@ Note: Theses are auto-ingested (from thesis inbox or LLM classification) and nev
 ```
 data/explore/<name>/
 ├── papers.jsonl        # Papers fetched from OpenAlex (title/abstract/authors/year/doi/cited_by_count)
-├── meta.json           # Exploration metadata (issn/count/fetched_at)
-├── explore.db          # SQLite (paper_vectors table, Qwen3 embeddings)
+├── meta.json           # Exploration metadata (query params/count/fetched_at)
+├── explore.db          # SQLite (paper_vectors table + explore_fts FTS5 full-text index)
 ├── faiss.index         # FAISS IndexFlatIP (cosine similarity)
 ├── faiss_ids.json      # paper_id list corresponding to FAISS index
 └── topic_model/
@@ -208,7 +227,7 @@ Default LLM backend: DeepSeek (`deepseek-chat`), OpenAI-compatible protocol.
 
 Skills are defined in `.claude/skills/` directory (also discoverable via `.agents/skills/` symlink), following the [Agent Skills](https://agentskills.io) open standard. Each skill is a folder containing a `SKILL.md` file (YAML frontmatter + instructions).
 
-**Available skills (22):**
+**Available skills (21):**
 
 Knowledge base management:
 - `search` — Literature search (keyword / semantic / author / hybrid retrieval / top-cited ranking)
@@ -216,11 +235,10 @@ Knowledge base management:
 - `enrich` — Enrich paper content (TOC / conclusion / abstract / citation count)
 - `ingest` — Ingest papers + rebuild indexes (pipeline presets)
 - `topics` — Topic exploration (BERTopic clustering + merge + visualization)
-- `explore` — Journal-wide exploration (OpenAlex + FAISS + BERTopic)
+- `explore` — Multi-dimensional literature exploration (OpenAlex multi-filter + FTS5/semantic/unified search + BERTopic)
 - `graph` — Citation graph queries
 - `citations` — Citation count queries and refresh
 - `index` — Rebuild FTS5 / FAISS indexes
-- `workspace` — Workspace management
 - `export` — BibTeX export
 - `import` — Endnote / Zotero import
 - `rename` — Paper file renaming
