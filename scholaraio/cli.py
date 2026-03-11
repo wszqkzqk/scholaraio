@@ -1284,109 +1284,15 @@ def cmd_import_endnote(args: argparse.Namespace, cfg) -> None:
         dry_run=args.dry_run,
     )
 
-    # Batch convert PDFs → paper.md via MinerU (default behavior)
+    # Batch convert PDFs → paper.md via MinerU + enrich (toc/l3/abstract)
     if not args.dry_run and not args.no_convert and stats["ingested"] > 0:
-        _batch_convert_pdfs(cfg)
+        _batch_convert_pdfs(cfg, enrich=True)
 
 
-def _batch_convert_pdfs(cfg) -> None:
+def _batch_convert_pdfs(cfg, *, enrich: bool = False) -> None:
     """Convert all unprocessed PDFs in papers_dir to paper.md via MinerU."""
-    import json
-    import shutil
-
-    from scholaraio.papers import iter_paper_dirs
-
-    to_convert: list[tuple[Path, Path]] = []  # (paper_dir, pdf_path)
-    for pdir in iter_paper_dirs(cfg.papers_dir):
-        if (pdir / "paper.md").exists():
-            continue
-        pdfs = list(pdir.glob("*.pdf"))
-        if pdfs:
-            to_convert.append((pdir, pdfs[0]))
-
-    if not to_convert:
-        ui("没有需要转换的 PDF")
-        return
-
-    from scholaraio.ingest.mineru import ConvertOptions, check_server, convert_pdf
-
-    use_local = check_server(cfg.ingest.mineru_endpoint)
-    api_key = None
-    if not use_local:
-        api_key = cfg.resolved_mineru_api_key()
-        if not api_key:
-            ui("错误：MinerU 不可达且无云 API key，无法批量转换")
-            return
-
-    ui(f"\n开始批量转换 {len(to_convert)} 个 PDF...")
-
-    converted = 0
-    for idx, (pdir, pdf_path) in enumerate(to_convert):
-        ui(f"[{idx+1}/{len(to_convert)}] {pdir.name}")
-
-        mineru_opts = ConvertOptions(
-            api_url=cfg.ingest.mineru_endpoint,
-            output_dir=pdir,
-        )
-
-        if use_local:
-            result = convert_pdf(pdf_path, mineru_opts)
-        else:
-            from scholaraio.ingest.mineru import convert_pdf_cloud
-            result = convert_pdf_cloud(
-                pdf_path, mineru_opts,
-                api_key=api_key,
-                cloud_url=cfg.ingest.mineru_cloud_url,
-            )
-
-        if not result.success:
-            ui(f"  转换失败: {result.error}")
-            continue
-
-        # Move output to paper.md
-        paper_md = pdir / "paper.md"
-        if result.md_path and result.md_path != paper_md:
-            if paper_md.exists():
-                paper_md.unlink()
-            shutil.move(str(result.md_path), str(paper_md))
-
-        # Clean up MinerU artifacts
-        for pattern in ["*_layout.json", "*_content_list.json", "*_origin.pdf"]:
-            for f in pdir.glob(pattern):
-                f.unlink(missing_ok=True)
-        for img_dir in pdir.glob("*_images"):
-            if img_dir.name != "images" and img_dir.is_dir():
-                target = pdir / "images"
-                if target.exists():
-                    shutil.rmtree(target)
-                img_dir.rename(target)
-
-        # Clean up source PDF
-        if pdf_path.exists() and pdf_path.name != "paper.pdf":
-            pdf_path.unlink()
-
-        # Backfill abstract if missing
-        try:
-            from scholaraio.papers import read_meta, write_meta
-            data = read_meta(pdir)
-            if not data.get("abstract") and paper_md.exists():
-                from scholaraio.ingest.metadata import extract_abstract_from_md
-                abstract = extract_abstract_from_md(paper_md, cfg)
-                if abstract:
-                    data["abstract"] = abstract
-                    write_meta(pdir, data)
-        except (ValueError, FileNotFoundError) as e:
-            _log.debug("failed to backfill abstract for %s: %s", pdir.name, e)
-
-        converted += 1
-
-    ui(f"批量转换完成: {converted}/{len(to_convert)}")
-
-    # Re-embed + re-index once
-    if converted:
-        from scholaraio.ingest.pipeline import step_embed, step_index
-        step_embed(cfg.papers_dir, cfg, {"dry_run": False, "rebuild": False})
-        step_index(cfg.papers_dir, cfg, {"dry_run": False, "rebuild": False})
+    from scholaraio.ingest.pipeline import batch_convert_pdfs
+    batch_convert_pdfs(cfg, enrich=enrich)
 
 
 def cmd_import_zotero(args: argparse.Namespace, cfg) -> None:
@@ -1478,9 +1384,9 @@ def cmd_import_zotero(args: argparse.Namespace, cfg) -> None:
         dry_run=args.dry_run,
     )
 
-    # Batch convert PDFs → paper.md via MinerU
+    # Batch convert PDFs → paper.md via MinerU + enrich (toc/l3/abstract)
     if not args.dry_run and not args.no_convert and stats["ingested"] > 0:
-        _batch_convert_pdfs(cfg)
+        _batch_convert_pdfs(cfg, enrich=True)
 
     # Import collections as workspaces
     if args.import_collections and not args.dry_run:

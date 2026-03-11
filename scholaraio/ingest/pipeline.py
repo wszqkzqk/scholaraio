@@ -645,6 +645,7 @@ def _process_inbox(
                 pdfs_to_convert, mineru_opts,
                 api_key=cfg.resolved_mineru_api_key(),
                 cloud_url=cfg.ingest.mineru_cloud_url,
+                batch_size=cfg.ingest.mineru_batch_size,
             )
             mineru_time = time.time() - t_batch_start
             # Move namespaced assets back to per-stem structure
@@ -941,6 +942,229 @@ def import_external(
 # ============================================================================
 #  Helpers
 # ============================================================================
+
+
+def batch_convert_pdfs(
+    cfg: Config,
+    *,
+    enrich: bool = False,
+) -> dict[str, int]:
+    """批量转换已入库论文的 PDF 为 paper.md，可选 enrich。
+
+    扫描 ``data/papers/`` 中有 PDF 无 paper.md 的论文，
+    云端模式使用 ``convert_pdfs_cloud_batch()`` 真正批量转换，
+    本地模式逐篇调用。转换后可选运行 toc + l3 + abstract backfill，
+    最后一次性 embed + index。
+
+    Args:
+        cfg: 全局配置。
+        enrich: 转换后是否运行 toc + l3 + abstract backfill。
+
+    Returns:
+        统计字典 ``{"converted": N, "failed": N, "skipped": N}``。
+    """
+    from scholaraio.papers import iter_paper_dirs
+
+    # Collect papers with PDF but no paper.md
+    to_convert: list[tuple[Path, Path]] = []  # (paper_dir, pdf_path)
+    for pdir in iter_paper_dirs(cfg.papers_dir):
+        if (pdir / "paper.md").exists():
+            continue
+        pdfs = list(pdir.glob("*.pdf"))
+        if pdfs:
+            to_convert.append((pdir, pdfs[0]))
+
+    stats: dict[str, int] = {"converted": 0, "failed": 0, "skipped": 0}
+    if not to_convert:
+        ui("没有需要转换的 PDF")
+        return stats
+
+    from scholaraio.ingest.mineru import ConvertOptions, check_server
+
+    use_local = check_server(cfg.ingest.mineru_endpoint)
+    api_key = None
+    if not use_local:
+        api_key = cfg.resolved_mineru_api_key()
+        if not api_key:
+            ui("错误：MinerU 不可达且无云 API key，无法批量转换")
+            return stats
+
+    ui(f"\n开始批量转换 {len(to_convert)} 个 PDF...")
+
+    converted_dirs: list[Path] = []
+
+    if use_local:
+        # Local MinerU: sequential single-file conversion
+        from scholaraio.ingest.mineru import convert_pdf
+        for idx, (pdir, pdf_path) in enumerate(to_convert):
+            ui(f"[{idx+1}/{len(to_convert)}] {pdir.name}")
+            mineru_opts = ConvertOptions(
+                api_url=cfg.ingest.mineru_endpoint,
+                output_dir=pdir,
+            )
+            result = convert_pdf(pdf_path, mineru_opts)
+            if not result.success:
+                ui(f"  转换失败: {result.error}")
+                stats["failed"] += 1
+                continue
+
+            _postprocess_convert(pdir, pdf_path, result)
+            converted_dirs.append(pdir)
+            stats["converted"] += 1
+    else:
+        # Cloud MinerU: true batch conversion via convert_pdfs_cloud_batch
+        import tempfile
+        from scholaraio.ingest.mineru import ConvertOptions, convert_pdfs_cloud_batch
+
+        # Collect PDF paths; detect stem collisions (batch API uses stem as data_id)
+        pdf_paths: list[Path] = []
+        dir_map: dict[str, Path] = {}
+        for pdir, pdf in to_convert:
+            if pdf.stem in dir_map:
+                _log.warning("PDF stem collision: %s in %s and %s, skipping latter",
+                             pdf.stem, dir_map[pdf.stem].name, pdir.name)
+                stats["skipped"] += 1
+                continue
+            dir_map[pdf.stem] = pdir
+            pdf_paths.append(pdf)
+
+        with tempfile.TemporaryDirectory(prefix="scholaraio_batch_") as tmp:
+            tmp_dir = Path(tmp)
+            batch_opts = ConvertOptions(output_dir=tmp_dir)
+
+            batch_results = convert_pdfs_cloud_batch(
+                pdf_paths, batch_opts,
+                api_key=api_key,
+                cloud_url=cfg.ingest.mineru_cloud_url,
+                batch_size=cfg.ingest.mineru_batch_size,
+            )
+
+            for br in batch_results:
+                stem = br.pdf_path.stem
+                pdir = dir_map.get(stem)
+                if pdir is None:
+                    _log.error("batch result stem %s not in dir_map", stem)
+                    stats["failed"] += 1
+                    continue
+
+                if not br.success:
+                    ui(f"  {pdir.name}: 转换失败: {br.error}")
+                    stats["failed"] += 1
+                    continue
+
+                # Move .md to paper_dir/paper.md
+                paper_md = pdir / "paper.md"
+                if br.md_path and br.md_path.exists():
+                    shutil.move(str(br.md_path), str(paper_md))
+
+                # Move namespaced images: tmp/<stem>_images → paper_dir/images
+                images_src = tmp_dir / f"{stem}_images"
+                if images_src.is_dir():
+                    images_dst = pdir / "images"
+                    if images_dst.exists():
+                        shutil.rmtree(str(images_dst))
+                    shutil.move(str(images_src), str(images_dst))
+                    # Fix image paths in markdown (data_id_images/ → images/)
+                    if paper_md.exists():
+                        md_text = paper_md.read_text(encoding="utf-8")
+                        fixed = md_text.replace(f"{stem}_images/", "images/")
+                        if fixed != md_text:
+                            paper_md.write_text(fixed, encoding="utf-8")
+
+                # Clean up source PDF (keep only markdown)
+                pdf_path = br.pdf_path
+                if pdf_path.exists() and pdf_path.parent == pdir and pdf_path.name != "paper.pdf":
+                    pdf_path.unlink()
+
+                ui(f"  {pdir.name}: OK")
+                converted_dirs.append(pdir)
+                stats["converted"] += 1
+
+    ui(f"批量转换完成: {stats['converted']}/{len(to_convert)}")
+
+    # Post-processing: abstract backfill + optional enrich (toc + l3)
+    if converted_dirs:
+        _batch_postprocess(converted_dirs, cfg, enrich=enrich)
+
+    return stats
+
+
+def _postprocess_convert(pdir: Path, pdf_path: Path, result) -> None:
+    """Post-process a single MinerU conversion result in paper_dir."""
+    paper_md = pdir / "paper.md"
+
+    # Move output to paper.md
+    if result.md_path and result.md_path != paper_md:
+        if paper_md.exists():
+            paper_md.unlink()
+        shutil.move(str(result.md_path), str(paper_md))
+
+    # Clean up MinerU artifacts
+    for pattern in ["*_layout.json", "*_content_list.json", "*_origin.pdf"]:
+        for f in pdir.glob(pattern):
+            f.unlink(missing_ok=True)
+    for img_dir in pdir.glob("*_images"):
+        if img_dir.name != "images" and img_dir.is_dir():
+            target = pdir / "images"
+            if target.exists():
+                shutil.rmtree(target)
+            img_dir.rename(target)
+
+    # Clean up source PDF
+    if pdf_path.exists() and pdf_path.name != "paper.pdf":
+        pdf_path.unlink()
+
+
+def _batch_postprocess(
+    converted_dirs: list[Path],
+    cfg: Config,
+    *,
+    enrich: bool = False,
+) -> None:
+    """Abstract backfill + optional toc/l3 enrich + embed/index for converted papers."""
+    from scholaraio.papers import read_meta, write_meta
+
+    # Abstract backfill
+    backfilled = 0
+    for pdir in converted_dirs:
+        paper_md = pdir / "paper.md"
+        if not paper_md.exists():
+            continue
+        try:
+            data = read_meta(pdir)
+            if not data.get("abstract"):
+                from scholaraio.ingest.metadata import extract_abstract_from_md
+                abstract = extract_abstract_from_md(paper_md, cfg)
+                if abstract:
+                    data["abstract"] = abstract
+                    write_meta(pdir, data)
+                    backfilled += 1
+        except (ValueError, FileNotFoundError) as e:
+            _log.debug("failed to backfill abstract for %s: %s", pdir.name, e)
+    if backfilled:
+        ui(f"Abstract 已补全: {backfilled} 篇")
+
+    # Enrich: toc + l3
+    if enrich:
+        enriched = 0
+        failed = 0
+        opts: dict[str, Any] = {"dry_run": False, "force": False, "max_retries": 2}
+        for pdir in converted_dirs:
+            json_path = pdir / "meta.json"
+            if not json_path.exists():
+                continue
+            ui(f"  enrich: {pdir.name}")
+            toc_res = step_toc(json_path, cfg, opts)
+            l3_res = step_l3(json_path, cfg, opts)
+            if toc_res == StepResult.FAIL or l3_res == StepResult.FAIL:
+                failed += 1
+            else:
+                enriched += 1
+        ui(f"Enrich 完成: {enriched} ok | {failed} failed")
+
+    # Re-embed + re-index once
+    step_embed(cfg.papers_dir, cfg, {"dry_run": False, "rebuild": False})
+    step_index(cfg.papers_dir, cfg, {"dry_run": False, "rebuild": False})
 
 
 def _collect_existing_dois(papers_dir: Path) -> dict[str, Path]:

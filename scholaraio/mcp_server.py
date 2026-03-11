@@ -933,7 +933,14 @@ def import_endnote(
             no_api=no_api,
             dry_run=dry_run,
         )
-        return json.dumps({"status": "ok", **stats, "dry_run": dry_run})
+
+        # Batch convert PDFs → paper.md + enrich (toc/l3/abstract)
+        convert_stats: dict = {}
+        if not dry_run and not no_convert and stats["ingested"] > 0:
+            from scholaraio.ingest.pipeline import batch_convert_pdfs
+            convert_stats = batch_convert_pdfs(cfg, enrich=True)
+
+        return json.dumps({"status": "ok", **stats, **convert_stats, "dry_run": dry_run})
     except Exception as e:
         _log.exception("import_endnote failed")
         return _error("internal", str(e))
@@ -1032,7 +1039,14 @@ def import_zotero(
             no_api=no_api,
             dry_run=dry_run,
         )
-        return json.dumps({"status": "ok", **stats, "dry_run": dry_run})
+
+        # Batch convert PDFs → paper.md + enrich (toc/l3/abstract)
+        convert_stats: dict = {}
+        if not dry_run and not no_convert and stats["ingested"] > 0:
+            from scholaraio.ingest.pipeline import batch_convert_pdfs
+            convert_stats = batch_convert_pdfs(cfg, enrich=True)
+
+        return json.dumps({"status": "ok", **stats, **convert_stats, "dry_run": dry_run})
     except ImportError as e:
         mod = getattr(e, "name", "") or ""
         return _error("missing_dependency", f"Missing dependency: {mod}",

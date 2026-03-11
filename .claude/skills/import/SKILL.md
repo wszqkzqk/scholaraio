@@ -10,13 +10,13 @@ description: Import papers from external reference managers (Endnote XML/RIS, Zo
 支持 Endnote 导出的 XML 和 RIS 格式文件。
 
 ```bash
-# 完整导入：元数据 + PDF 匹配 + MinerU 转换 + embed + index
+# 完整导入：元数据 + PDF 匹配 + MinerU 批量转换 + enrich (toc/l3/abstract) + embed + index
 scholaraio import-endnote <file.xml>
 
 # 多文件导入
 scholaraio import-endnote file1.xml file2.ris
 
-# 仅导入元数据和 PDF，跳过 MinerU 转换
+# 仅导入元数据和 PDF，跳过 MinerU 转换和 enrich
 scholaraio import-endnote <file.xml> --no-convert
 
 # 预览模式
@@ -30,7 +30,17 @@ scholaraio import-endnote <file.xml> --no-api
 
 对 Endnote XML 文件，自动解析 `internal-pdf://` 链接，从 `<library>.Data/PDF/` 目录匹配 PDF：
 - 多个 PDF 时自动排除 SI/补充材料
-- 默认通过 MinerU 转换为 paper.md
+- 默认通过 MinerU 批量转换为 paper.md
+
+### 导入后自动处理
+
+默认行为（不带 `--no-convert`）下，导入完成后自动执行完整 pipeline：
+1. **批量 PDF→MD**：云端模式使用 `convert_pdfs_cloud_batch()` 批量转换（批次大小由 `config.yaml` `ingest.mineru_batch_size` 控制，默认 20）
+2. **Abstract 补全**：从 markdown 中提取缺失的摘要
+3. **TOC + L3 提取**：LLM 提取目录结构和结论段
+4. **Embed + Index**：更新语义向量和全文索引
+
+使用 `--no-convert` 跳过以上全部后处理（仅导入元数据 + PDF 复制 + embed + index）。
 
 ## Zotero 导入
 
@@ -68,10 +78,24 @@ zotero:
   library_id: "your-library-id"
 ```
 
-## 补充 PDF
+## 补充 PDF（单篇）
 
 ```bash
 scholaraio attach-pdf <paper-id> <path/to/paper.pdf>
 ```
 
 自动调用 MinerU 转换 PDF → markdown，补全缺失的 abstract，增量更新 embed + index。
+
+## 批量补转 PDF（已入库论文）
+
+对已入库但缺少 paper.md 的论文（如首次导入时用了 `--no-convert`），可通过 Python 调用批量转换：
+
+```python
+from scholaraio.config import load_config
+from scholaraio.ingest.pipeline import batch_convert_pdfs
+
+cfg = load_config()
+stats = batch_convert_pdfs(cfg, enrich=True)
+```
+
+自动扫描 `data/papers/` 中有 PDF 无 paper.md 的论文，云端模式使用批量 API 转换，完成后运行 abstract backfill + toc + l3 + embed + index。

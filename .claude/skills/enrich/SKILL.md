@@ -7,6 +7,8 @@ description: Enrich paper metadata using LLM extraction. Extract table of conten
 
 通过 LLM 提取论文的目录结构（TOC）或结论段（L3），丰富论文元数据。
 
+> **注意**：`import-endnote` / `import-zotero` 导入时默认自动执行 toc + l3 + abstract backfill。以下命令用于**选择性富化**（如重新提取、补充特定论文、或处理全库）。
+
 ## 执行逻辑
 
 1. 解析用户意图：

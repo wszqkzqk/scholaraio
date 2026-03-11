@@ -44,7 +44,7 @@ MinerU 解析的 Markdown 保留了高质量公式（LaTeX）和图片附件（`
 | `ingest/mineru.py` | PDF → MinerU Markdown（云 API / 本地） |
 | `ingest/extractor.py` | 元数据提取（regex / auto / robust / llm 四种模式） |
 | `ingest/metadata/` | API 查询补全（Crossref / S2 / OpenAlex）、JSON 输出、文件重命名 |
-| `ingest/pipeline.py` | 可组合入库流水线（DOI 去重 + pending 机制） |
+| `ingest/pipeline.py` | 可组合入库流水线（DOI 去重 + pending + 外部导入批量转换） |
 | `index.py` | FTS5 全文检索 + papers_registry + citations 引用图谱 |
 | `vectors.py` | Qwen3 语义向量 + FAISS 增量索引 |
 | `topics.py` | BERTopic 主题建模 + 6 种 HTML 可视化 |
@@ -89,6 +89,13 @@ explore.py — 期刊全量探索（独立数据流，与主库隔离）
 workspace.py — 工作区论文子集管理（薄层，复用现有搜索/导出）
   workspace/<name>/papers.json → 指向 data/papers/ 中论文（UUID 索引）
   搜索/导出通过 paper_ids 参数注入 search()/vsearch()/unified_search()/export_bibtex()
+
+import-endnote / import-zotero — 外部文献管理工具导入（完整 pipeline）
+  sources/endnote.py | sources/zotero.py → 解析元数据 + 匹配 PDF
+    → pipeline.import_external() → DOI 去重 + 入库 + PDF 复制 + embed + index
+    → pipeline.batch_convert_pdfs(enrich=True)
+       → 批量 PDF→MD（云端 batch API，批次大小: config ingest.mineru_batch_size）
+       → abstract backfill + toc + l3 提取 + embed + index
 ```
 
 ### 分层加载设计（L1-L4）

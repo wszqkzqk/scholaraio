@@ -547,7 +547,7 @@ def convert_pdf_cloud(
     return result
 
 
-CLOUD_BATCH_SIZE = 20  # max files per batch request
+_DEFAULT_CLOUD_BATCH_SIZE = 20  # max files per batch request
 
 
 def convert_pdfs_cloud_batch(
@@ -556,17 +556,20 @@ def convert_pdfs_cloud_batch(
     *,
     api_key: str,
     cloud_url: str = CLOUD_API_URL,
+    batch_size: int = _DEFAULT_CLOUD_BATCH_SIZE,
 ) -> list[ConvertResult]:
     """通过 MinerU 云 API 批量转换 PDF 为 Markdown。
 
     所有 PDF 在一个 batch 内提交，并行上传，统一轮询。
-    超过 ``CLOUD_BATCH_SIZE`` 时自动分批。
+    超过 ``batch_size`` 时自动分批。
 
     Args:
         pdf_paths: PDF 文件路径列表。
         opts: 转换选项。
         api_key: MinerU 云 API 密钥。
         cloud_url: MinerU 云 API 基础 URL。
+        batch_size: 每批提交文件数上限，默认 20。可通过
+            ``config.yaml`` 的 ``ingest.mineru_batch_size`` 配置。
 
     Returns:
         与 ``pdf_paths`` 等长的 :class:`ConvertResult` 列表。
@@ -576,8 +579,8 @@ def convert_pdfs_cloud_batch(
 
     # Split into chunks
     all_results: list[ConvertResult] = []
-    for chunk_start in range(0, len(pdf_paths), CLOUD_BATCH_SIZE):
-        chunk = pdf_paths[chunk_start:chunk_start + CLOUD_BATCH_SIZE]
+    for chunk_start in range(0, len(pdf_paths), batch_size):
+        chunk = pdf_paths[chunk_start:chunk_start + batch_size]
         chunk_results = _convert_chunk_cloud(chunk, opts, api_key=api_key, cloud_url=cloud_url)
         all_results.extend(chunk_results)
     return all_results

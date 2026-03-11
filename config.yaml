@@ -25,6 +25,7 @@ ingest:
   mineru_api_key: null # → config.local.yaml or env MINERU_API_KEY
   abstract_llm_mode: verify # off | fallback | verify
   contact_email: null # Crossref polite pool email → config.local.yaml
+  mineru_batch_size: 20 # Cloud batch size per request 云端每批文件数上限
 
 # Semantic embeddings 语义向量
 embed:

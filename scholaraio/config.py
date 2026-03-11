@@ -143,6 +143,7 @@ class IngestConfig:
             - ``"verify"``：正则成功后仍由 LLM 校验/修正，失败时 LLM 直接提取。
 
         contact_email: Crossref polite pool 联系邮箱（User-Agent），建议放 config.local.yaml。
+        mineru_batch_size: MinerU 云 API 每批提交文件数上限，默认 20。
     """
     extractor: str = "robust"                 # regex | auto | llm | robust
     mineru_endpoint: str = "http://localhost:8000"
@@ -150,6 +151,7 @@ class IngestConfig:
     mineru_api_key: str = ""
     abstract_llm_mode: str = "verify"        # off | fallback | verify
     contact_email: str = ""
+    mineru_batch_size: int = 20              # cloud batch size per request
 
 
 @dataclass
@@ -378,6 +380,7 @@ def _build_config(data: dict, root: Path) -> Config:
         mineru_api_key=ingest_data.get("mineru_api_key") or "",
         abstract_llm_mode=ingest_data.get("abstract_llm_mode", "verify"),
         contact_email=ingest_data.get("contact_email") or "",
+        mineru_batch_size=int(ingest_data.get("mineru_batch_size", 20)),
     )
 
     embed_data = data.get("embed", {}) or {}

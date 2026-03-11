@@ -47,7 +47,7 @@ The above are baseline capabilities. Feel free to combine CLI tools and the codi
 | `ingest/mineru.py` | PDF → MinerU Markdown (cloud API / local) |
 | `ingest/extractor.py` | Metadata extraction (regex / auto / robust / llm — 4 modes) |
 | `ingest/metadata/` | API query completion (Crossref / S2 / OpenAlex), JSON output, file renaming |
-| `ingest/pipeline.py` | Composable ingest pipeline (DOI dedup + pending mechanism) |
+| `ingest/pipeline.py` | Composable ingest pipeline (DOI dedup + pending + external import batch conversion) |
 | `index.py` | FTS5 full-text search + papers_registry + citations graph |
 | `vectors.py` | Qwen3 semantic vectors + FAISS incremental indexing |
 | `topics.py` | BERTopic topic modeling + 6 HTML visualizations |
@@ -92,6 +92,13 @@ explore.py — Journal-wide exploration (independent data flow, isolated from ma
 workspace.py — Workspace paper subset management (thin layer, reuses search/export)
   workspace/<name>/papers.json → references papers in data/papers/ (UUID index)
   Search/export via paper_ids parameter injected into search()/vsearch()/unified_search()/export_bibtex()
+
+import-endnote / import-zotero — External reference manager import (full pipeline)
+  sources/endnote.py | sources/zotero.py → parse metadata + match PDFs
+    → pipeline.import_external() → DOI dedup + ingest + PDF copy + embed + index
+    → pipeline.batch_convert_pdfs(enrich=True)
+       → batch PDF→MD (cloud batch API, batch size: config ingest.mineru_batch_size)
+       → abstract backfill + toc + l3 extraction + embed + index
 ```
 
 ### Layered Loading Design (L1-L4)
