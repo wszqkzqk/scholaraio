@@ -155,9 +155,34 @@ data/papers/         # Your paper library (gitignored)
 data/inbox/          # Drop PDFs here for ingestion
 ```
 
+## Why ScholarAIO?
+
+| | Traditional workflow | Zotero / Endnote | ScholarAIO |
+|--|---------------------|------------------|------------|
+| **Ingest PDFs** | Manual rename & organize | Import + manual tagging | Drop PDF → auto-parse, extract metadata, deduplicate |
+| **Search** | Ctrl+F in each PDF | Title/author search | Keyword + semantic + fusion search across full text |
+| **Discover connections** | Read everything yourself | Manual collections | Auto topic clustering, citation graph, shared references |
+| **Write literature review** | Copy-paste from papers | Copy-paste from papers | AI drafts from your library with real citations |
+| **Export references** | Manual BibTeX entry | Built-in export | One command, filtered by workspace/year/journal |
+| **Interaction** | Mouse + menus | Mouse + menus | Natural language in terminal |
+
 ## Contributing
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+## Citation
+
+If you use ScholarAIO in your research, please cite:
+
+```bibtex
+@software{scholaraio,
+  author = {Liao, Zi-Mo},
+  title = {ScholarAIO: AI-Native Research Terminal},
+  year = {2026},
+  url = {https://github.com/ZimoLiao/scholaraio},
+  license = {MIT}
+}
+```
 
 ## License
 

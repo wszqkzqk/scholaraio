@@ -155,9 +155,34 @@ data/papers/         # 你的论文库（不进 git）
 data/inbox/          # 放入 PDF 即可入库
 ```
 
+## 为什么选 ScholarAIO？
+
+| | 传统工作流 | Zotero / Endnote | ScholarAIO |
+|--|-----------|------------------|------------|
+| **导入 PDF** | 手动重命名、整理 | 导入 + 手动标签 | 放入 PDF → 自动解析、提取元数据、去重 |
+| **检索** | 每篇 PDF 里 Ctrl+F | 标题/作者搜索 | 关键词 + 语义 + 融合检索，覆盖全文 |
+| **发现关联** | 全靠自己读 | 手动建分组 | 自动主题聚类、引用图谱、共同引用分析 |
+| **写文献综述** | 从论文里复制粘贴 | 从论文里复制粘贴 | AI 基于你的文献库起草，附真实引用 |
+| **导出参考文献** | 手动录入 BibTeX | 内置导出 | 一条命令，按工作区/年份/期刊过滤 |
+| **交互方式** | 鼠标 + 菜单 | 鼠标 + 菜单 | 终端里用自然语言 |
+
 ## 参与贡献
 
 欢迎贡献！请参阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解详情。
+
+## 引用
+
+如果 ScholarAIO 对你的研究有帮助，欢迎引用：
+
+```bibtex
+@software{scholaraio,
+  author = {Liao, Zi-Mo},
+  title = {ScholarAIO: AI-Native Research Terminal},
+  year = {2026},
+  url = {https://github.com/ZimoLiao/scholaraio},
+  license = {MIT}
+}
+```
 
 ## 许可证
 
