@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use ScholarAIO in your research, please cite it as below."
+title: "ScholarAIO"
+abstract: "Scholar All-In-One — local academic literature explorer powered by AI"
+type: software
+license: MIT
+repository-code: "https://github.com/zimoliao/scholaraio"
+version: 0.1.0
+date-released: "2025-06-01"
+authors:
+  - family-names: Liao
+    given-names: Zimo
+    email: zimoliao@mail.ustc.edu.cn
+keywords:
+  - academic literature
+  - knowledge base
+  - semantic search
+  - research assistant
+  - Claude Code
