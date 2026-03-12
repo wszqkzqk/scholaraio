@@ -208,6 +208,14 @@ data/explore/<name>/
 Main config: `config.yaml` (tracked in git)
 Sensitive info: `config.local.yaml` (not tracked, overrides config.yaml)
 
+config.yaml lookup order:
+1. Explicit `config_path` argument
+2. Environment variable `SCHOLARAIO_CONFIG`
+3. Walk up from CWD (max 6 levels)
+4. `~/.scholaraio/config.yaml` (global config for plugin mode)
+
+All relative paths (`data/papers`, `data/index.db`, etc.) resolve from the directory containing config.yaml. In plugin mode with global config, data lives under `~/.scholaraio/data/`.
+
 LLM API key lookup order:
 1. `config.local.yaml` → `llm.api_key`
 2. Environment variable `SCHOLARAIO_LLM_API_KEY`

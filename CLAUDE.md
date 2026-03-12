@@ -216,6 +216,15 @@ data/explore/<name>/
 主配置：`config.yaml`（进 git）
 敏感信息：`config.local.yaml`（不进 git，覆盖 config.yaml）
 
+config.yaml 查找顺序：
+1. 显式传入的 `config_path`
+2. 环境变量 `SCHOLARAIO_CONFIG`
+3. 当前工作目录逐级向上查找（最多 6 级）
+4. `~/.scholaraio/config.yaml`（全局配置，插件模式使用）
+
+所有相对路径（`data/papers`、`data/index.db` 等）基于 config.yaml 所在目录解析。
+在项目目录内使用时，路径指向项目下的 `data/`；作为插件使用时，全局 config 使路径指向 `~/.scholaraio/data/`。
+
 LLM API key 查找顺序：
 1. `config.local.yaml` 中的 `llm.api_key`
 2. 环境变量 `SCHOLARAIO_LLM_API_KEY`
@@ -233,7 +242,7 @@ LLM API key 查找顺序：
 
 ## Claude Code Skills
 
-Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agentskills.io) 开放标准。每个 skill 是一个文件夹，包含 `SKILL.md`（YAML frontmatter + 指令）。
+Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agentskills.io) 开放标准。每个 skill 是一个文件夹，包含 `SKILL.md`（YAML frontmatter + 指令）。根目录 `skills/` 为指向 `.claude/skills/` 的符号链接，供 Claude Code 插件系统发现。
 
 **现有 skills（22 个）：**
 
@@ -279,6 +288,8 @@ Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agents
 
 ## 新用户引导
 
+### 本地使用（clone repo）
+
 当检测到项目尚未配置完成时，使用 `scholaraio setup` 引导用户：
 
 1. **诊断**：运行 `scholaraio setup check` 查看当前状态（缺什么一目了然）
@@ -288,7 +299,43 @@ Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agents
 
 也可以使用 `/setup` skill 让 agent 代为完成全部配置。
 
-API key 说明：
+### 插件使用（skill market / Claude Code plugin）
+
+用户可以在任意项目中通过 Claude Code 插件系统安装 ScholarAIO skills：
+
+```
+/plugin marketplace add ZimoLiao/scholaraio
+/plugin install scholaraio@scholaraio-marketplace
+```
+
+首次打开新会话时，SessionStart hook 自动完成：
+1. 检测并安装 `scholaraio` Python 包
+2. 创建全局配置 `~/.scholaraio/config.yaml`
+3. 创建数据目录 `~/.scholaraio/data/`
+
+插件模式下所有数据存放在 `~/.scholaraio/`：
+
+```
+~/.scholaraio/
+├── config.yaml           # 全局配置（从插件 bundle 复制）
+├── config.local.yaml     # API keys（用户手动创建或通过 setup 向导）
+├── data/
+│   ├── papers/           # 已入库论文
+│   ├── inbox/            # 待入库 PDF
+│   ├── inbox-thesis/     # 学位论文
+│   ├── inbox-doc/        # 非论文文档
+│   ├── pending/          # 待确认
+│   ├── explore/          # 文献探索数据
+│   ├── topic_model/      # 主题模型
+│   ├── index.db          # SQLite 索引
+│   └── metrics.db        # 调用指标
+└── workspace/            # 工作区
+```
+
+Skills 安装后以 `/scholaraio:search`、`/scholaraio:show` 等命名空间形式使用。
+
+### API key 说明
+
 - **LLM key**（DeepSeek / OpenAI）：元数据提取 + 内容富化。不配置则降级为纯正则，enrich 不可用
 - **MinerU key**：PDF → Markdown 云转换。不配置则只能手动放 `.md` 入库
 - 嵌入模型（Qwen3-Embedding-0.6B，~1.2GB）首次 embed/vsearch 时自动下载。海外用户在 `config.yaml` 中将 `embed.source` 改为 `huggingface`
@@ -315,5 +362,20 @@ API key 说明：
 | GitHub Copilot | `.github/copilot-instructions.md`（wrapper） | — |
 | Cline | `.clinerules`（wrapper） | `.claude/skills/`（原生支持） |
 
-Skills 采用 [AgentSkills.io](https://agentskills.io) 开放标准（`SKILL.md` 格式）。规范位置为 `.claude/skills/`，`.agents/skills/` 为符号链接，供跨 agent 发现。
+Skills 采用 [AgentSkills.io](https://agentskills.io) 开放标准（`SKILL.md` 格式）。规范位置为 `.claude/skills/`，`.agents/skills/` 为符号链接供跨 agent 发现，`skills/` 为符号链接供 Claude Code 插件系统发现。
+
+### 插件打包
+
+项目同时是一个 Claude Code plugin + marketplace：
+
+```
+.claude-plugin/
+├── plugin.json          # 插件身份（name/version/description/keywords）
+└── marketplace.json     # 市场目录（/plugin marketplace add 使用）
+skills/ → .claude/skills/  # 插件系统的 skill 发现入口
+hooks/hooks.json           # SessionStart hook（自动安装依赖 + 创建全局 config）
+scripts/check-deps.sh     # hook 调用的依赖检测/安装脚本
+```
+
+用户可通过 `/plugin marketplace add ZimoLiao/scholaraio` 安装。SkillsMP 等 skill market 通过爬取 GitHub `filename:SKILL.md` 自动索引。
 
