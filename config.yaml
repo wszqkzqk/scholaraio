@@ -16,6 +16,7 @@ llm:
   timeout: 30 # Normal LLM call timeout (sec) 普通调用超时（秒）
   timeout_toc: 120 # enrich-toc timeout enrich-toc 超时
   timeout_clean: 90 # validate_and_clean timeout 结论清洗超时
+  concurrency: 32 # Max concurrent LLM calls for enrich (toc/l3) enrich 并发数
 
 # Ingest pipeline 数据入库管道
 ingest:

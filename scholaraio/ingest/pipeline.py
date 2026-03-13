@@ -952,14 +952,23 @@ def run_pipeline(
         else:
             ok_total = fail_total = skip_total = 0
             step_times: dict[str, float] = {}
-            for json_path in json_paths:
-                ui(f"\n{json_path.parent.name}")
+
+            # Concurrent execution for papers_steps when LLM-bound steps
+            # (toc, l3) are present. All papers_steps run per-paper inside
+            # _process_one_paper(); different papers execute in parallel.
+            llm_steps = {"toc", "l3"}
+            has_llm_steps = bool(set(papers_steps) & llm_steps)
+            workers = cfg.llm.concurrency if has_llm_steps else 1
+
+            def _process_one_paper(json_path: Path) -> tuple[str, dict[str, float]]:
+                """Process all papers_steps for one paper. Returns (status, timings)."""
                 paper_ok = True
                 paper_skipped = False
+                timings: dict[str, float] = {}
                 for step_name in papers_steps:
                     with timer(f"pipeline.papers.{step_name}", "step") as t:
                         result = STEPS[step_name].fn(json_path, cfg, opts)
-                    step_times[step_name] = step_times.get(step_name, 0) + t.elapsed
+                    timings[step_name] = t.elapsed
                     if result == StepResult.SKIP:
                         _log.debug("%s: skipped", step_name)
                         paper_skipped = True
@@ -968,13 +977,48 @@ def run_pipeline(
                         paper_ok = False
                     else:
                         _log.debug("%s: %.1fs OK", step_name, t.elapsed)
-
                 if paper_skipped and paper_ok:
-                    skip_total += 1
-                elif paper_ok:
-                    ok_total += 1
-                else:
-                    fail_total += 1
+                    return "skip", timings
+                return ("ok" if paper_ok else "fail"), timings
+
+            if workers > 1 and len(json_paths) > 1:
+                from concurrent.futures import ThreadPoolExecutor, as_completed
+
+                ui(f"  (concurrency: {workers} workers)")
+                with ThreadPoolExecutor(max_workers=min(workers, len(json_paths))) as pool:
+                    futures = {pool.submit(_process_one_paper, jp): jp for jp in json_paths}
+                    for done_count, fut in enumerate(as_completed(futures), 1):
+                        jp = futures[fut]
+                        try:
+                            status, timings = fut.result()
+                        except Exception:
+                            _log.exception("paper failed: %s", jp.parent.name)
+                            status, timings = "fail", {}
+                        ui(f"  [{done_count}/{len(json_paths)}] {jp.parent.name} [{status}]")
+                        if status == "skip":
+                            skip_total += 1
+                        elif status == "ok":
+                            ok_total += 1
+                        else:
+                            fail_total += 1
+                        for sn, st in timings.items():
+                            step_times[sn] = step_times.get(sn, 0) + st
+            else:
+                for json_path in json_paths:
+                    ui(f"\n{json_path.parent.name}")
+                    try:
+                        status, timings = _process_one_paper(json_path)
+                    except Exception:
+                        _log.exception("paper failed: %s", json_path.parent.name)
+                        status, timings = "fail", {}
+                    if status == "skip":
+                        skip_total += 1
+                    elif status == "ok":
+                        ok_total += 1
+                    else:
+                        fail_total += 1
+                    for sn, st in timings.items():
+                        step_times[sn] = step_times.get(sn, 0) + st
 
             ui(f"\nPapers done: {ok_total} ok | {fail_total} failed | {skip_total} skipped")
             if step_times:

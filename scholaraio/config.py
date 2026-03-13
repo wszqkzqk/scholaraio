@@ -58,6 +58,7 @@ class LLMConfig:
         timeout: 普通 LLM 调用超时（秒）。
         timeout_toc: enrich-toc 调用超时（秒），标题列表较长。
         timeout_clean: validate_and_clean 调用超时（秒），结论全文较长。
+        concurrency: enrich pipeline 最大并发 LLM 调用数。
     """
 
     backend: str = "openai-compat"
@@ -67,6 +68,7 @@ class LLMConfig:
     timeout: int = 30
     timeout_toc: int = 120
     timeout_clean: int = 90
+    concurrency: int = 32
 
 
 @dataclass
@@ -393,6 +395,7 @@ def _build_config(data: dict, root: Path) -> Config:
         timeout=int(llm_data.get("timeout", 30)),
         timeout_toc=int(llm_data.get("timeout_toc", 120)),
         timeout_clean=int(llm_data.get("timeout_clean", 90)),
+        concurrency=max(1, int(llm_data.get("concurrency", 32))),
     )
 
     ingest = IngestConfig(

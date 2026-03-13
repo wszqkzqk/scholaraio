@@ -13,6 +13,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import sqlite3
+import threading
 import time
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -122,7 +123,8 @@ class MetricsStore:
 
     def __init__(self, db_path: Path | str, session_id: str) -> None:
         self._session_id = session_id
-        self._conn = sqlite3.connect(str(db_path))
+        self._lock = threading.Lock()
+        self._conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute(_CREATE_TABLE)
         for idx_sql in _CREATE_INDEXES:
@@ -157,24 +159,25 @@ class MetricsStore:
             status: ``"ok"`` | ``"error"`` | ``"skip"``。
             detail: 额外信息（序列化为 JSON）。
         """
-        self._conn.execute(
-            "INSERT INTO events (session_id, timestamp, category, name, "
-            "duration_s, tokens_in, tokens_out, model, status, detail) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                self._session_id,
-                datetime.now(timezone.utc).isoformat(),
-                category,
-                name,
-                duration_s,
-                tokens_in,
-                tokens_out,
-                model,
-                status,
-                _json.dumps(detail, ensure_ascii=False) if detail else None,
-            ),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO events (session_id, timestamp, category, name, "
+                "duration_s, tokens_in, tokens_out, model, status, detail) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    self._session_id,
+                    datetime.now(timezone.utc).isoformat(),
+                    category,
+                    name,
+                    duration_s,
+                    tokens_in,
+                    tokens_out,
+                    model,
+                    status,
+                    _json.dumps(detail, ensure_ascii=False) if detail else None,
+                ),
+            )
+            self._conn.commit()
 
     def query(
         self,
@@ -208,9 +211,10 @@ class MetricsStore:
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         sql = f"SELECT * FROM events{where} ORDER BY id DESC LIMIT ?"
         params.append(limit)
-        cur = self._conn.execute(sql, params)
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, row)) for row in cur.fetchall()]
+        with self._lock:
+            cur = self._conn.execute(sql, params)
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
 
     def summary(self, session_id: str | None = None) -> dict:
         """汇总 LLM token 用量。
@@ -234,7 +238,8 @@ class MetricsStore:
             f"COALESCE(SUM(duration_s), 0) "
             f"FROM events {clause}"
         )
-        row = self._conn.execute(sql, params).fetchone()
+        with self._lock:
+            row = self._conn.execute(sql, params).fetchone()
         return {
             "call_count": row[0],
             "total_tokens_in": row[1],
@@ -243,7 +248,8 @@ class MetricsStore:
         }
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
 
 # ============================================================================

@@ -178,7 +178,7 @@ def fetch_zotero_api(
                         # Use dump() to download the file
                         filename = cd.get("filename", f"{item['key']}.pdf")
                         out_path = target / filename
-                        zot.dump(child["key"], filename, target)
+                        zot.dump(child["key"], filename, str(target))
                         if out_path.exists():
                             pdf_path = out_path
                         break
