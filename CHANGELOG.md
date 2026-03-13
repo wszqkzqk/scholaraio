@@ -7,17 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added
-- Code quality toolchain: ruff, mypy, pre-commit hooks
-- CI workflow: lint, typecheck, test matrix (Python 3.10–3.12)
-- Contract-level test suite (33 tests)
-- Community governance: CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
-- GitHub issue/PR templates
-- CITATION.cff for academic citation
-- MkDocs documentation site with API reference
-- Release workflow for PyPI publishing
-
-## [0.1.0] — 2025-06-01
+## [0.1.0] — 2026-03-13
 
 ### Added
 - Core knowledge base: PDF ingestion (MinerU), FTS5 search, semantic search (FAISS + Qwen3)
@@ -33,3 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - MCP server with 31 tools
 - Bilingual setup wizard (EN/ZH)
 - GPU-adaptive batch embedding with automatic profiling
+- Multi-LLM provider support (Anthropic, Google Gemini) via OpenAI-compat / Anthropic / Google backends
+- Book type detection and L3 skip for non-article types
+- Concurrent LLM calls for enrich pipeline (toc/l3)
+- Skill market packaging for plugin/marketplace discovery
+- SessionStart hook for auto-installing dependencies
+- Code quality toolchain: ruff, mypy, pre-commit hooks
+- CI workflow: lint, typecheck, test matrix (Python 3.10–3.12)
+- Contract-level test suite (33 tests)
+- Community governance: CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
+- GitHub issue/PR templates
+- CITATION.cff for academic citation
+- MkDocs documentation site with API reference
+- Release workflow for PyPI publishing
