@@ -218,3 +218,27 @@ class TestFederatedSearchMultiScope:
         assert "bogus" in result
         assert result["bogus"][0]["error"] == "unknown_scope"
         assert "message" in result["bogus"][0]
+
+    def test_empty_scope_falls_back_to_main(self, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        with (
+            patch("scholaraio.mcp_server._get_cfg", return_value=cfg),
+            patch("scholaraio.index.unified_search", return_value=[_MAIN_PAPER]),
+        ):
+            from scholaraio.mcp_server import federated_search
+
+            result = json.loads(federated_search("attention", scope=""))
+
+        assert "main" in result
+
+    def test_comma_only_scope_falls_back_to_main(self, tmp_path):
+        cfg = _make_cfg(tmp_path)
+        with (
+            patch("scholaraio.mcp_server._get_cfg", return_value=cfg),
+            patch("scholaraio.index.unified_search", return_value=[_MAIN_PAPER]),
+        ):
+            from scholaraio.mcp_server import federated_search
+
+            result = json.loads(federated_search("attention", scope=",,,"))
+
+        assert "main" in result

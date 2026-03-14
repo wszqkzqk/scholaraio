@@ -1644,24 +1644,26 @@ def cmd_insights(args: argparse.Namespace, cfg) -> None:
             except Exception:
                 pass
 
-    # Second pass: resolve titles only for the top-N candidates that will be shown.
-    # Disk reads are capped to at most 10 lookups.
-    pid_to_title: dict[str, str] = {}
+    # Build title map for ALL names using already-recorded detail.title (zero disk I/O).
+    # This ensures the aggregation below correctly merges UUID/dir_name variants for any paper.
+    pid_to_title: dict[str, str] = dict(name_to_detail_title)
+
+    # Disk reads only for the top-10 names still missing a title (≤10 reads total).
     for name, _ in name_counts.most_common(10):
-        title = name_to_detail_title.get(name, "")
-        if not title:
+        if not pid_to_title.get(name):
             meta_path = papers_dir / name / "meta.json"
             if meta_path.exists():
                 try:
                     meta = _json.loads(meta_path.read_text("utf-8"))
-                    title = meta.get("title", "")
+                    t = meta.get("title", "")
+                    if t:
+                        pid_to_title[name] = t
                 except Exception:
                     pass
-        pid_to_title[name] = title or name
 
     title_read_counts: Counter = Counter()
     for name, cnt in name_counts.items():
-        title_key = pid_to_title.get(name, name)
+        title_key = pid_to_title.get(name) or name
         title_read_counts[title_key] += cnt
 
     ui("【最常阅读论文 Top 10】")

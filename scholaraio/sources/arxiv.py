@@ -18,7 +18,6 @@ def _user_agent() -> str:
     return f"scholaraio/{__version__} (https://github.com/ZimoLiao/scholaraio)"
 
 
-_USER_AGENT = "scholaraio/1.0 (https://github.com/ZimoLiao/scholaraio)"  # fallback; see _user_agent()
 _NS = {
     "atom": "http://www.w3.org/2005/Atom",
     "arxiv": "http://arxiv.org/schemas/atom",

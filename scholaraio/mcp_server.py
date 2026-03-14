@@ -1479,7 +1479,7 @@ def federated_search(
     import sqlite3
 
     cfg = _get_cfg()
-    scopes = [s.strip() for s in scope.split(",") if s.strip()]
+    scopes = [s.strip() for s in scope.split(",") if s.strip()] or ["main"]
     output: dict[str, list[dict]] = {}
 
     for src in scopes:
@@ -1537,7 +1537,7 @@ def federated_search(
                             ).fetchall()
                         in_lib_dois = {r[0].lower() for r in rows}
                     except Exception:
-                        pass
+                        _log.debug("arXiv in-library annotation failed (index_db=%s)", cfg.index_db, exc_info=True)
                 for r in arxiv_results:
                     r["in_main_library"] = bool(r.get("doi") and r["doi"].lower() in in_lib_dois)
             output["arxiv"] = arxiv_results
