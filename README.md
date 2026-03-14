@@ -46,7 +46,8 @@ claude    # Launch Claude Code in the project directory — that's it
 
 |  | Feature | Details |
 |--|---------|---------|
-| **PDF Parsing** | Deep structure extraction | [MinerU](https://github.com/opendatalab/MinerU) → Markdown with figures, tables, LaTeX equations preserved. Papers, theses, technical reports, and other document types all supported |
+| **PDF Parsing** | Deep structure extraction | [MinerU](https://github.com/opendatalab/MinerU) → Markdown with figures, tables, LaTeX equations preserved. Long PDFs (>100 pp) are auto-split and merged |
+| **Not Just Papers** | Any document goes in | Journal articles, theses, technical reports, standards, lecture notes — three inboxes for different document types, each with tailored metadata handling |
 | **Hybrid Search** | Keyword + semantic fusion | FTS5 + Qwen3 embeddings + FAISS → RRF ranking |
 | **Topic Discovery** | Auto-clustering | BERTopic + 6 interactive HTML visualizations — works on both your library and explore datasets |
 | **Literature Exploration** | Multi-dimensional discovery | OpenAlex with 9 filter dimensions (journal, concept, author, institution, keyword, source type, year, citations, work type) → embed → cluster → search |
@@ -54,6 +55,7 @@ claude    # Launch Claude Code in the project directory — that's it
 | **Layered Reading** | Read at the depth you need | L1 metadata → L2 abstract → L3 conclusion → L4 full text |
 | **Multi-Source Import** | Bring your existing library | Endnote XML/RIS, Zotero (API + SQLite, with collection → workspace mapping), PDF, Markdown — more sources planned |
 | **Workspaces** | Organize for projects | Paper subsets with scoped search and BibTeX export |
+| **Persistent Notes** | Cross-session memory | Agent analysis is saved per-paper (`notes.md`). Revisiting a paper reuses prior findings instead of re-reading the full text — saves tokens and avoids redundant work |
 | **Academic Writing** | AI-assisted drafting | Literature review, paper sections, citation check, rebuttal, gap analysis — every claim traceable to your own library |
 | **MCP Server** | 31 tools | Works with Claude Desktop, Cursor, and any MCP client |
 
@@ -83,6 +85,14 @@ ScholarAIO is designed to be **agent-agnostic**. It currently ships with configu
 
 The **MCP server** (`scholaraio-mcp`, 31 tools) works with any MCP-compatible client. Skills follow the open [AgentSkills.io](https://agentskills.io) standard — `.agents/skills/` is a symlink to `.claude/skills/` for cross-agent discovery.
 
+**Use without cloning** — install as a Claude Code plugin into any project:
+
+```bash
+/plugin marketplace add ZimoLiao/scholaraio
+/plugin install scholaraio@scholaraio-marketplace
+# Skills available as /scholaraio:search, /scholaraio:show, etc.
+```
+
 **Migrating from existing tools?** Import directly from Endnote (XML/RIS) and Zotero (Web API or local SQLite) — your PDFs, metadata, and references come along. More import sources are on the roadmap.
 
 ## How It Works
@@ -109,7 +119,7 @@ Main config: `config.yaml` (tracked). Secrets: `config.local.yaml` (gitignored).
 
 | Key | Purpose | Get it |
 |-----|---------|--------|
-| `DEEPSEEK_API_KEY` | LLM — metadata extraction, enrichment, academic discussion | [DeepSeek](https://platform.deepseek.com/) (default) or any OpenAI-compatible API |
+| LLM API key | Metadata extraction, enrichment, academic discussion | Set `llm.api_key` in `config.local.yaml`, or use env vars: `SCHOLARAIO_LLM_API_KEY` (universal), `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` / `GEMINI_API_KEY`. Default backend: [DeepSeek](https://platform.deepseek.com/); also supports Claude, Gemini, Ollama, and any OpenAI-compatible API |
 | `MINERU_API_KEY` | PDF → structured Markdown | Free at [mineru.net](https://mineru.net/apiManage/token) or [self-host](https://github.com/opendatalab/MinerU) |
 
 > **Both are optional.** Without LLM: regex-only extraction. Without MinerU: place `.md` files in `data/inbox/` directly.

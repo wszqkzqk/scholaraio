@@ -309,6 +309,18 @@ System maintenance:
 - `setup` — Environment detection and setup wizard
 - `metrics` — LLM token usage and call statistics
 
+**Adding new skills:**
+
+Tool skills (wrapping CLI commands):
+1. Implement the Python function in `scholaraio/`
+2. Expose it as a CLI subcommand in `scholaraio/cli.py`
+3. Test the CLI command with real data to confirm it works
+4. Create the skill file at `.claude/skills/<name>/SKILL.md`
+
+Orchestration skills (pure prompt, e.g. academic writing):
+1. Write instructions in `.claude/skills/<name>/SKILL.md`, composing calls to existing CLI commands
+2. No new Python code or CLI subcommands needed
+
 ## Getting Started
 
 ### Local Use (clone repo)
