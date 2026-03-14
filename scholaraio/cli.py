@@ -1511,11 +1511,11 @@ def cmd_fsearch(args: argparse.Namespace, cfg) -> None:
             else:
                 for i, r in enumerate(results, 1):
                     score = r.get("score", 0.0)
-                    _print_search_result(i, r, extra=f"{r.get('match','?')} {score:.3f}")
+                    _print_search_result(i, r, extra=f"{r.get('match', '?')} {score:.3f}")
             ui()
 
         elif scope.startswith("explore:"):
-            explore_name = scope[len("explore:"):]
+            explore_name = scope[len("explore:") :]
             if explore_name == "*":
                 from scholaraio.explore import list_explore_libs
 
@@ -1540,7 +1540,7 @@ def cmd_fsearch(args: argparse.Namespace, cfg) -> None:
                         authors = r.get("authors", [])
                         first = authors[0] if authors else "?"
                         score = r.get("score", 0.0)
-                        ui(f"  [{i}] [{r.get('year','?')}] {r.get('title','')}")
+                        ui(f"  [{i}] [{r.get('year', '?')}] {r.get('title', '')}")
                         ui(f"       {first} | score: {score:.3f}")
                         ui()
 
@@ -1556,8 +1556,8 @@ def cmd_fsearch(args: argparse.Namespace, cfg) -> None:
                     doi = r.get("doi", "")
                     in_lib = doi and doi.lower() in main_dois
                     status = "  [已入库]" if in_lib else ""
-                    ui(f"  [{i}] [{r.get('year','?')}] {r.get('title','')}{status}")
-                    ui(f"       {first} | arxiv:{r.get('arxiv_id','')}" + (f" | doi:{doi}" if doi else ""))
+                    ui(f"  [{i}] [{r.get('year', '?')}] {r.get('title', '')}{status}")
+                    ui(f"       {first} | arxiv:{r.get('arxiv_id', '')}" + (f" | doi:{doi}" if doi else ""))
                     ui()
 
         else:
@@ -1571,7 +1571,6 @@ def cmd_fsearch(args: argparse.Namespace, cfg) -> None:
 
 def cmd_insights(args: argparse.Namespace, cfg) -> None:
     import json as _json
-    import sqlite3
     from collections import Counter
     from datetime import datetime, timedelta, timezone
 
@@ -1599,9 +1598,38 @@ def cmd_insights(args: argparse.Namespace, cfg) -> None:
 
     # 1. 搜索热词 Top 10
     _STOPWORDS = {
-        "a", "an", "the", "of", "in", "on", "at", "to", "for", "with", "by", "and",
-        "or", "is", "are", "was", "were", "be", "been", "have", "has", "do", "does",
-        "this", "that", "it", "its", "from", "as", "via", "using", "based",
+        "a",
+        "an",
+        "the",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "with",
+        "by",
+        "and",
+        "or",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "have",
+        "has",
+        "do",
+        "does",
+        "this",
+        "that",
+        "it",
+        "its",
+        "from",
+        "as",
+        "via",
+        "using",
+        "based",
     }
     word_counts: Counter = Counter()
     for ev in search_events:
@@ -1616,7 +1644,7 @@ def cmd_insights(args: argparse.Namespace, cfg) -> None:
             q = ""
         if q:
             for w in q.lower().split():
-                w = w.strip('"\',.:;!?()[]{}')
+                w = w.strip("\"',.:;!?()[]{}")
                 if w and w not in _STOPWORDS and len(w) > 1:
                     word_counts[w] += 1
 

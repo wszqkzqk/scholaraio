@@ -1490,9 +1490,7 @@ def federated_search(
         import sqlite3
 
         conn = sqlite3.connect(str(cfg.index_db))
-        rows = conn.execute(
-            "SELECT doi FROM papers_registry WHERE doi IS NOT NULL AND doi != ''"
-        ).fetchall()
+        rows = conn.execute("SELECT doi FROM papers_registry WHERE doi IS NOT NULL AND doi != ''").fetchall()
         conn.close()
         main_dois = {r[0].lower() for r in rows}
     except Exception:
@@ -1511,7 +1509,7 @@ def federated_search(
                 output["main"] = [{"error": str(e)}]
 
         elif src.startswith("explore:"):
-            explore_name = src[len("explore:"):]
+            explore_name = src[len("explore:") :]
             if explore_name == "*":
                 from scholaraio.explore import list_explore_libs
 
