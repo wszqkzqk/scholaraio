@@ -334,15 +334,15 @@ def export_markdown_refs(
     Returns:
         Markdown string with all matching references.
     """
+    from scholaraio.citation_styles import FormatterFn, _fmt_apa, get_formatter
     from scholaraio.papers import iter_paper_dirs, parse_year_range, read_meta
 
-    # Resolve formatter — cfg required for custom styles
+    fmt_fn: FormatterFn
     if style == "apa":
-        from scholaraio.citation_styles import _fmt_apa as fmt_fn
+        fmt_fn = _fmt_apa
     else:
         if cfg is None:
             raise ValueError("cfg is required when style != 'apa'")
-        from scholaraio.citation_styles import get_formatter
         fmt_fn = get_formatter(style, cfg)
 
     year_start, year_end = parse_year_range(year) if year else (None, None)
@@ -365,7 +365,7 @@ def export_markdown_refs(
 
     lines: list[str] = []
     for i, meta in enumerate(metas, 1):
-        lines.append(fmt_fn(meta, idx=i if numbered else None))
+        lines.append(fmt_fn(meta, i if numbered else None))
 
     return "\n".join(lines) + "\n" if lines else ""
 
@@ -399,9 +399,7 @@ def export_docx(
         from docx import Document
         from docx.shared import Pt
     except ImportError:
-        raise ImportError(
-            "python-docx 未安装，请运行: pip install python-docx"
-        )
+        raise ImportError("python-docx 未安装，请运行: pip install python-docx")
 
     doc = Document()
 
@@ -471,10 +469,7 @@ def _md_to_docx(doc, content: str) -> None:
             # Strip separator row (---)
             data_rows = [r for r in table_lines if not re.match(r"^\|[-| :]+\|$", r.strip())]
             if data_rows:
-                cells_per_row = [
-                    [c.strip() for c in r.strip().strip("|").split("|")]
-                    for r in data_rows
-                ]
+                cells_per_row = [[c.strip() for c in r.strip().strip("|").split("|")] for r in data_rows]
                 ncols = max(len(row) for row in cells_per_row)
                 table = doc.add_table(rows=len(cells_per_row), cols=ncols)
                 table.style = "Table Grid"

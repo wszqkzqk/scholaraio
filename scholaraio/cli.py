@@ -2183,7 +2183,12 @@ def main() -> None:
     p_em.add_argument("--year", type=str, default=None, help="年份过滤：2023 / 2020-2024")
     p_em.add_argument("--journal", type=str, default=None, help="期刊名过滤（模糊匹配）")
     p_em.add_argument("--bullet", action="store_true", help="使用无序列表（默认有序）")
-    p_em.add_argument("--style", type=str, default="apa", help="引用格式：apa（默认）/ vancouver / chicago-author-date / mla / <自定义>")
+    p_em.add_argument(
+        "--style",
+        type=str,
+        default="apa",
+        help="引用格式：apa（默认）/ vancouver / chicago-author-date / mla / <自定义>",
+    )
     p_em.add_argument("-o", "--output", type=str, default=None, help="输出文件路径（省略则输出到屏幕）")
 
     p_ed = p_export_sub.add_parser("docx", help="将 Markdown 文本导出为 Word DOCX 文件")

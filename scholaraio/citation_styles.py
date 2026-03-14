@@ -28,6 +28,7 @@ Agent workflow for fetching a new style
 4. Agent runs ``scholaraio export markdown --all --style <name>``
 5. Style is now cached; future calls skip steps 1-3.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -45,6 +46,7 @@ FormatterFn = Callable[[dict, int | None], str]
 # ─────────────────────────────────────────────────────────────────────────────
 # Built-in styles
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _fmt_apa(meta: dict, idx: int | None = None) -> str:
     """APA 7th edition (author-date, ampersand, italicised journal+volume)."""
@@ -247,6 +249,7 @@ BUILTIN_DESCRIPTIONS: dict[str, str] = {
 # Dynamic cache loading
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def styles_dir(cfg: Config) -> Path:
     """Return the citation styles cache directory (data/citation_styles/)."""
     return cfg.papers_dir.parent / "citation_styles"
@@ -303,9 +306,7 @@ def get_formatter(name: str, cfg: Config) -> FormatterFn:
     mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     if not hasattr(mod, "format_ref"):
-        raise AttributeError(
-            f"Style file {style_file} must define a `format_ref(meta, idx)` function."
-        )
+        raise AttributeError(f"Style file {style_file} must define a `format_ref(meta, idx)` function.")
     return mod.format_ref
 
 
