@@ -304,7 +304,7 @@ def export_markdown_refs(
         fmt_fn = BUILTIN_STYLES[style]
     else:
         if cfg is None:
-            raise ValueError("cfg is required for custom styles")
+            raise ValueError("自定义引用格式需要传入 cfg 参数")
         fmt_fn = get_formatter(style, cfg)
 
     year_start, year_end = parse_year_range(year) if year else (None, None)

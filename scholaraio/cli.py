@@ -1194,7 +1194,7 @@ def _cmd_export_markdown(args: argparse.Namespace, cfg) -> None:
             numbered=not args.bullet,
             style=style,
         )
-    except (FileNotFoundError, ValueError, AttributeError) as e:
+    except (FileNotFoundError, ValueError, AttributeError, ImportError) as e:
         _log.error("%s", e)
         sys.exit(1)
 
