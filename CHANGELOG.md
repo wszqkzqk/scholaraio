@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Federated search** (`fsearch` CLI + `federated_search` MCP tool): search across main library, explore silos (`explore:NAME` / `explore:*`), and arXiv in a single command; arXiv results annotated with "已入库" when DOI matches the main library
+- **arXiv source module** (`sources/arxiv.py`): shared Atom API client using `defusedxml` for safe XML parsing
+- **Insights analytics** (`scholaraio insights`): behavior dashboard showing top search keywords, most-read papers, weekly reading trend, semantic neighbor recommendations, and active workspaces with paper counts
+- **Metrics recording for search/read**: `search`, `usearch`, `vsearch`, and `show` commands now record events to `metrics.db` for behavior analysis
+- **`MetricsStore.query_distinct_names()`**: efficient distinct-name query with supporting `(category, name)` index, used by insights recommendations
+- **Skill YAML front matter**: all 23 skills now carry standardized `version`/`author`/`license`/`tags` metadata; new `insights` skill added
+- **clawhub.yaml**: marketplace manifest listing all available skills for discovery
+
+### Fixed
+
+- **Federated search DOI annotation**: `WHERE doi IN (...)` replaced with `WHERE LOWER(doi) IN (...)` in both `cli.py` and `mcp_server.py`, preventing false negatives when stored DOIs have different casing
+- **`insights --days` validation**: replaced `args.days or 30` with explicit `days <= 0` check; `--days 0` or negative values now produce a clear error instead of silently defaulting to 30
+
 - **Office format import**: `inbox-doc/` now accepts `.docx`, `.xlsx`, `.pptx` files; new `step_office_convert` pipeline step converts them to Markdown via MarkItDown before ingestion
 - **RIS export**: `export ris` outputs RIS format compatible with Zotero, Endnote, and Mendeley (zero dependencies)
 - **Markdown reference list export**: `export markdown` generates formatted reference lists with configurable citation styles (APA, Vancouver, Chicago, MLA); supports ordered/unordered lists
