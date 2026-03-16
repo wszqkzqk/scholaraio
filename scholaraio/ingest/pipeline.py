@@ -1581,8 +1581,8 @@ def _collect_existing_ids(papers_dir: Path) -> tuple[dict[str, Path], dict[str, 
     """Collect existing DOIs and patent publication numbers for dedup.
 
     Returns:
-        (dois, pub_nums) — dois maps lowercase DOI → json_path,
-        pub_nums maps uppercase publication number → json_path.
+        (dois, pub_nums) — DOIs map lowercase key → json_path,
+        pub_nums map uppercase key → json_path.
     """
     from scholaraio.papers import iter_paper_dirs
 
@@ -1960,7 +1960,7 @@ def _update_registry(cfg, meta, dir_name: str) -> None:
                 conn.execute("SELECT publication_number FROM papers_registry LIMIT 0")
             except sqlite3.OperationalError:
                 conn.execute("ALTER TABLE papers_registry ADD COLUMN publication_number TEXT")
-            pub_num = getattr(meta, "publication_number", "") or ""
+            pub_num = (getattr(meta, "publication_number", "") or "").upper().strip()
             conn.execute(
                 """INSERT OR REPLACE INTO papers_registry
                    (id, dir_name, title, doi, publication_number, year, first_author)

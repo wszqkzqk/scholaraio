@@ -217,7 +217,7 @@ def build_index(papers_dir: Path, db_path: Path, rebuild: bool = False) -> int:
 
             # Update papers_registry
             dir_name = pdir.name
-            pub_num = (meta.get("ids") or {}).get("patent_publication_number", "")
+            pub_num = ((meta.get("ids") or {}).get("patent_publication_number", "") or "").upper().strip()
             conn.execute(
                 """INSERT OR REPLACE INTO papers_registry
                    (id, dir_name, title, doi, publication_number, year, first_author)
@@ -564,7 +564,8 @@ def lookup_paper(db_path: Path, user_input: str) -> dict | None:
         # Try patent publication number (normalize to uppercase)
         try:
             row = conn.execute(
-                "SELECT * FROM papers_registry WHERE publication_number = ?", (user_input.upper().strip(),)
+                "SELECT * FROM papers_registry WHERE publication_number = ?",
+                (user_input.upper().strip(),),
             ).fetchone()
             if row:
                 return dict(row)

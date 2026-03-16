@@ -84,22 +84,20 @@ def detect_language(text: str) -> str:
 #  Chunking (preserve markdown structure)
 # ============================================================================
 
-# Patterns for blocks that should NOT be translated (protected blocks)
-_CODE_BLOCK_RE = re.compile(r"```[\s\S]*?```", re.MULTILINE)
-_DISPLAY_MATH_RE = re.compile(r"\$\$[\s\S]*?\$\$", re.MULTILINE)
-_IMAGE_RE = re.compile(r"!\[.*?\]\(.*?\)")
-
-# Combined pattern for all protected blocks
+# Combined pattern for protected blocks (code fences, display math, images)
 _PROTECTED_RE = re.compile(
     r"(```[\s\S]*?```|\$\$[\s\S]*?\$\$|!\[.*?\]\(.*?\))",
     re.MULTILINE,
 )
 
+_PLACEHOLDER_FMT = "\x00PROTECTED_{}\x00"
+_PLACEHOLDER_RE = re.compile(r"\x00PROTECTED_(\d+)\x00")
+
 
 def _split_into_chunks(text: str, chunk_size: int) -> list[str]:
     """Split markdown text into translatable chunks respecting structure.
 
-    Protected blocks (code blocks, display math, images) are replaced with
+    Protected blocks (code fences, display math, images) are replaced with
     placeholders before splitting to prevent them from being broken across
     chunks. After splitting, placeholders are restored.
 
@@ -110,18 +108,18 @@ def _split_into_chunks(text: str, chunk_size: int) -> list[str]:
     Returns:
         List of text chunks.
     """
-    # Extract protected blocks and replace with placeholders
+    # Mask protected blocks with placeholders
     protected: list[str] = []
 
-    def _replace(m: re.Match) -> str:
+    def _mask(m: re.Match) -> str:
         idx = len(protected)
         protected.append(m.group(0))
-        return f"\x00PROTECTED_{idx}\x00"
+        return _PLACEHOLDER_FMT.format(idx)
 
-    safe_text = _PROTECTED_RE.sub(_replace, text)
+    masked = _PROTECTED_RE.sub(_mask, text)
 
     # Split on paragraph boundaries
-    paragraphs = re.split(r"\n{2,}", safe_text)
+    paragraphs = re.split(r"\n{2,}", masked)
     chunks: list[str] = []
     current: list[str] = []
     current_len = 0
@@ -140,9 +138,7 @@ def _split_into_chunks(text: str, chunk_size: int) -> list[str]:
 
     # Restore protected blocks in each chunk
     def _restore(chunk: str) -> str:
-        for i, block in enumerate(protected):
-            chunk = chunk.replace(f"\x00PROTECTED_{i}\x00", block)
-        return chunk
+        return _PLACEHOLDER_RE.sub(lambda m: protected[int(m.group(1))], chunk)
 
     return [_restore(c) for c in chunks]
 
@@ -151,7 +147,7 @@ def _split_into_chunks(text: str, chunk_size: int) -> list[str]:
 #  Translation via LLM
 # ============================================================================
 
-_TRANSLATE_PROMPT = """\
+_TRANSLATE_PROMPT_BASE = """\
 翻译以下学术论文段落至{target_lang}。
 
 重要事项：
@@ -160,11 +156,26 @@ _TRANSLATE_PROMPT = """\
 - 保留代码块（```...```）不翻译
 - 保留图片引用（![...](...)）不翻译
 - 保留作者姓名和引用格式（如 [Smith et al., 2023]）
-- 对于专业术语，在首次出现时用「英文 (中文翻译)」格式
+{terminology_rule}\
 - 只返回翻译文本，不要任何解释
 
 原文：
 {text}"""
+
+# Terminology annotation rules per target language
+_TERMINOLOGY_RULES: dict[str, str] = {
+    "zh": "- 对于专业术语，在首次出现时用「英文 (中文翻译)」格式\n",
+    "ja": "- 専門用語は初出時に「英語 (日本語訳)」の形式で記載すること\n",
+    "ko": "- 전문 용어는 처음 등장할 때 「영어 (한국어 번역)」 형식을 사용\n",
+}
+
+
+def _build_translate_prompt(text: str, target_lang: str, lang_name: str) -> str:
+    """Build the translation prompt with language-appropriate terminology rule."""
+    rule = _TERMINOLOGY_RULES.get(target_lang, "")
+    return _TRANSLATE_PROMPT_BASE.format(
+        target_lang=lang_name, terminology_rule=rule, text=text,
+    )
 
 
 def _translate_chunk(text: str, target_lang: str, config: Config, timeout: int | None = None) -> str:
@@ -182,7 +193,7 @@ def _translate_chunk(text: str, target_lang: str, config: Config, timeout: int |
     from scholaraio.metrics import call_llm
 
     lang_name = _LANG_NAMES.get(target_lang, target_lang)
-    prompt = _TRANSLATE_PROMPT.format(target_lang=lang_name, text=text)
+    prompt = _build_translate_prompt(text, target_lang, lang_name)
     result = call_llm(
         prompt,
         config,
