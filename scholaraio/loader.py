@@ -128,10 +128,14 @@ def load_l4(md_path: Path, *, lang: str | None = None) -> str:
         完整 Markdown 文本。
     """
     if lang:
-        # Normalize + validate lang to prevent path traversal (only allow [a-z]{2,5})
-        lang = lang.lower().strip()
-        if not re.match(r"^[a-z]{2,5}$", lang):
+        # Normalize + validate lang to prevent path traversal
+        try:
+            from scholaraio.translate import validate_lang
+
+            lang = validate_lang(lang)
+        except (ValueError, Exception):
             _log.warning("invalid lang code %r, falling back to original", lang)
+            lang = None
         else:
             translated = md_path.parent / f"paper_{lang}.md"
             if translated.exists():

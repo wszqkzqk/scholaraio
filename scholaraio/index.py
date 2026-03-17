@@ -98,6 +98,7 @@ def _index_hash(meta: dict) -> str:
         meta.get("l3_conclusion") or "",
         meta.get("doi") or "",
         meta.get("paper_type") or "",
+        ((meta.get("ids") or {}).get("patent_publication_number", "") or ""),
     ]
     cc = meta.get("citation_count")
     if cc and isinstance(cc, dict):

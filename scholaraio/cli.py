@@ -293,10 +293,11 @@ def cmd_show(args: argparse.Namespace, cfg) -> None:
             sys.exit(1)
         lang = getattr(args, "lang", None)
         if lang:
-            import re as _re
+            from scholaraio.translate import validate_lang
 
-            lang = lang.lower().strip()
-            if not _re.match(r"^[a-z]{2,5}$", lang):
+            try:
+                lang = validate_lang(lang)
+            except ValueError:
                 ui(f"错误: 无效的语言代码 '{lang}'")
                 sys.exit(1)
             translated_path = md_path.parent / f"paper_{lang}.md"
