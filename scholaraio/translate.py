@@ -292,12 +292,16 @@ SKIP_SAME_LANG = "same_language"
 
 
 def _validate_lang(lang: str) -> str:
-    """Validate and return a safe language code.
+    """Validate, normalize, and return a safe language code.
+
+    Normalizes to lowercase and strips whitespace before validation,
+    so config values like ``"ZH"`` or ``" zh "`` are accepted.
 
     Raises:
-        ValueError: If ``lang`` contains path separators or doesn't match
-            the ``[a-z]{2,5}`` pattern (ISO 639-1/3).
+        ValueError: If ``lang`` doesn't match the ``[a-z]{2,5}`` pattern
+            (ISO 639-1/3) after normalization.
     """
+    lang = lang.lower().strip()
     if not _LANG_CODE_RE.match(lang):
         raise ValueError(f"invalid language code: {lang!r} (expected 2-5 lowercase letters)")
     return lang

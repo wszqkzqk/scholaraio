@@ -1905,7 +1905,7 @@ def _move_to_pending(
 
     Args:
         ctx: Inbox 上下文。
-        issue: 问题类型标识（``"no_doi"`` | ``"duplicate"``）。
+        issue: 问题类型标识（``"no_doi"`` | ``"no_pub_num"`` | ``"duplicate"``）。
         message: 人类可读的问题描述。
         extra: 附加信息写入 pending.json（如重复论文的已有路径）。
     """
