@@ -157,9 +157,10 @@ def _adjust_for_placeholder(text: str, cut: int) -> int:
 def _split_into_chunks(text: str, chunk_size: int) -> list[str]:
     """Split markdown text into translatable chunks respecting structure.
 
-    Protected blocks (code fences, display math, images) are replaced with
-    placeholders before splitting to prevent them from being broken across
-    chunks. After splitting, placeholders are restored.
+    Protected blocks (code fences, display math ``$$...$$``, inline math
+    ``$...$``, and images) are replaced with placeholders before splitting
+    to prevent them from being broken across chunks. After splitting,
+    placeholders are restored.
 
     Args:
         text: Full markdown text.

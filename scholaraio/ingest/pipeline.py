@@ -330,12 +330,14 @@ def step_extract(ctx: InboxCtx) -> StepResult:
 
 
 def step_dedup(ctx: InboxCtx) -> StepResult:
-    """API 查询补全 + DOI 去重检查。
+    """API 查询补全 + DOI / 公开号去重检查。
 
     1. 调用 Crossref / S2 / OpenAlex API 补全元数据
     2. 有 DOI 时检查是否与已入库论文重复
-    3. 无 DOI 时：thesis inbox 标记直接放行；否则依次 LLM 判断是否 thesis / book
-    4. 无 DOI 且非 thesis/book 才转入 ``data/pending/``
+    3. thesis inbox 标记直接放行
+    4. patent inbox 标记 paper_type=patent，按公开号去重；无公开号转 pending
+    5. 无 DOI 时：检测是否为专利（文本中含公开号），是则按公开号去重并入库
+    6. 无 DOI 且非 thesis/patent/book 才转入 ``data/pending/``
 
     Args:
         ctx: Inbox 上下文，需要 ``ctx.meta`` 已设置。
@@ -1050,8 +1052,11 @@ def run_pipeline(
 
     按 scope 分三阶段依次执行:
       1. **inbox** — 逐个文件: mineru → extract → dedup → ingest
-      2. **papers** — 逐篇已入库论文: toc → l3
+      2. **papers** — 逐篇已入库论文: toc → l3 → translate（auto_translate 开启时自动注入）
       3. **global** — 全局执行一次: embed → index
+
+    当 ``config.translate.auto_translate`` 为 ``True`` 且 pipeline 包含 inbox 步骤时，
+    会在 papers scope 阶段自动注入 translate 步骤（位于 embed/index 之前）。
 
     Args:
         step_names: 步骤名称列表，如 ``["extract", "dedup", "ingest"]``。
