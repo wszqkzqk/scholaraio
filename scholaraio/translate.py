@@ -105,10 +105,12 @@ _PLACEHOLDER_RE = re.compile(r"\x00PROTECTED_(\d+)\x00")
 
 
 def _hard_split(text: str, chunk_size: int) -> list[str]:
-    """Split an oversized text block into pieces ≤ chunk_size.
+    """Split an oversized text block into pieces targeting chunk_size.
 
     Tries sentence boundaries first (``". "``), falls back to hard cut.
     Avoids cutting through ``\\x00PROTECTED_N\\x00`` placeholder tokens.
+    A piece may exceed chunk_size only if a single placeholder token is
+    longer than chunk_size (unavoidable).
     """
     if len(text) <= chunk_size:
         return [text]
@@ -120,7 +122,14 @@ def _hard_split(text: str, chunk_size: int) -> list[str]:
         else:
             cut += 2  # include ". "
         # Ensure we don't split inside a placeholder token
+        orig_cut = cut
         cut = _adjust_for_placeholder(text, cut)
+        # If placeholder adjustment pushed cut beyond chunk_size, split
+        # *before* the placeholder instead (unless that gives us nothing).
+        if cut > orig_cut and cut > chunk_size:
+            before_placeholder = text.rfind("\x00PROTECTED_", 0, orig_cut)
+            if before_placeholder > 0:
+                cut = before_placeholder
         parts.append(text[:cut])
         text = text[cut:]
     if text:
@@ -291,7 +300,7 @@ SKIP_EMPTY = "empty_source"
 SKIP_SAME_LANG = "same_language"
 
 
-def _validate_lang(lang: str) -> str:
+def validate_lang(lang: str) -> str:
     """Validate, normalize, and return a safe language code.
 
     Normalizes to lowercase and strips whitespace before validation,
@@ -315,10 +324,12 @@ class TranslateResult:
         path: Path to the translated file, or ``None`` if skipped/failed.
         skip_reason: Why the translation was skipped (one of ``SKIP_*`` constants),
             or empty string if translated successfully.
+        partial: ``True`` when some chunks failed and the output is mixed-language.
     """
 
     path: Path | None = None
     skip_reason: str = ""
+    partial: bool = False
 
     @property
     def ok(self) -> bool:
@@ -346,7 +357,7 @@ def translate_paper(
     Returns:
         :class:`TranslateResult` with ``path`` (or ``None``) and ``skip_reason``.
     """
-    lang = _validate_lang(target_lang or config.translate.target_lang)
+    lang = validate_lang(target_lang or config.translate.target_lang)
     md_path = paper_dir / "paper.md"
     out_path = paper_dir / f"paper_{lang}.md"
 
@@ -374,6 +385,7 @@ def translate_paper(
     _log.debug("translating %s: %d chunks, target=%s", paper_dir.name, len(chunks), lang)
 
     translated_chunks: list[str] = []
+    failed_count = 0
     for i, chunk in enumerate(chunks):
         try:
             translated = _translate_chunk(chunk, lang, config)
@@ -382,15 +394,25 @@ def translate_paper(
         except Exception as e:
             _log.error("  chunk %d/%d failed: %s", i + 1, len(chunks), e)
             translated_chunks.append(chunk)  # keep original on failure
+            failed_count += 1
+
+    is_partial = failed_count > 0
+    if is_partial:
+        _log.warning(
+            "%s: %d/%d chunks failed — output is mixed-language",
+            paper_dir.name,
+            failed_count,
+            len(chunks),
+        )
 
     result = "\n\n".join(translated_chunks)
     out_path.write_text(result, encoding="utf-8")
     _log.debug("translation saved: %s (%d chars)", out_path.name, len(result))
 
     # Record translation metadata in meta.json
-    _record_translation_meta(paper_dir, lang, src_lang, config)
+    _record_translation_meta(paper_dir, lang, src_lang, config, partial=is_partial)
 
-    return TranslateResult(path=out_path)
+    return TranslateResult(path=out_path, partial=is_partial)
 
 
 def batch_translate(
@@ -455,19 +477,29 @@ def batch_translate(
     return stats
 
 
-def _record_translation_meta(paper_dir: Path, target_lang: str, src_lang: str, config: Config) -> None:
+def _record_translation_meta(
+    paper_dir: Path,
+    target_lang: str,
+    src_lang: str,
+    config: Config,
+    *,
+    partial: bool = False,
+) -> None:
     """Record translation info in meta.json."""
     from scholaraio.papers import read_meta, write_meta
 
     try:
         data = read_meta(paper_dir)
         translations = data.get("translations", {})
-        translations[target_lang] = {
+        entry: dict[str, object] = {
             "file": f"paper_{target_lang}.md",
             "source_lang": src_lang,
             "translated_at": datetime.now().isoformat(timespec="seconds"),
             "model": config.llm.model,
         }
+        if partial:
+            entry["status"] = "partial"
+        translations[target_lang] = entry
         data["translations"] = translations
         write_meta(paper_dir, data)
     except Exception as e:

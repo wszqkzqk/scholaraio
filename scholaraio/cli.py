@@ -732,9 +732,9 @@ def cmd_translate(args: argparse.Namespace, cfg) -> None:
     target_lang = (args.lang or cfg.translate.target_lang).lower().strip()
 
     try:
-        from scholaraio.translate import _validate_lang
+        from scholaraio.translate import validate_lang
 
-        _validate_lang(target_lang)
+        validate_lang(target_lang)
     except ValueError:
         ui(f"错误: 无效的语言代码 '{target_lang}'（应为 2-5 个小写字母，如 zh、en、ja）")
         sys.exit(1)

@@ -1196,8 +1196,9 @@ def run_pipeline(
             llm_steps = {"toc", "l3", "translate"}
             has_llm_steps = bool(set(papers_steps) & llm_steps)
             if has_llm_steps and "translate" in papers_steps:
-                # Use translate-specific concurrency (may differ from general llm.concurrency)
-                workers = cfg.translate.concurrency
+                # When translate coexists with other LLM steps (toc/l3), use the
+                # lower of the two limits to avoid exceeding backend rate limits.
+                workers = min(cfg.translate.concurrency, cfg.llm.concurrency)
             elif has_llm_steps:
                 workers = cfg.llm.concurrency
             else:
@@ -1973,6 +1974,22 @@ def _repair_abstract(json_path: Path, md_path: Path, cfg: Config) -> None:
         _log.debug("abstract backfilled from MD (%d chars)", len(abstract))
 
 
+_registry_migrated: set[Path] = set()
+
+
+def _ensure_registry_schema(conn, db_path: Path) -> None:
+    """Run publication_number column migration once per db_path per process."""
+    import sqlite3
+
+    if db_path in _registry_migrated:
+        return
+    try:
+        conn.execute("SELECT publication_number FROM papers_registry LIMIT 0")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE papers_registry ADD COLUMN publication_number TEXT")
+    _registry_migrated.add(db_path)
+
+
 def _update_registry(cfg, meta, dir_name: str) -> None:
     """Insert/update papers_registry so UUID lookup works immediately."""
     import sqlite3
@@ -1982,11 +1999,7 @@ def _update_registry(cfg, meta, dir_name: str) -> None:
         return
     try:
         with sqlite3.connect(db_path) as conn:
-            # Ensure publication_number column exists (old DB migration)
-            try:
-                conn.execute("SELECT publication_number FROM papers_registry LIMIT 0")
-            except sqlite3.OperationalError:
-                conn.execute("ALTER TABLE papers_registry ADD COLUMN publication_number TEXT")
+            _ensure_registry_schema(conn, db_path)
             pub_num = (getattr(meta, "publication_number", "") or "").upper().strip()
             try:
                 conn.execute(
