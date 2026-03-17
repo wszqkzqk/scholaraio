@@ -7,7 +7,9 @@ Does NOT test: SQLite internals, exact ranking scores, hash logic.
 
 from __future__ import annotations
 
-from scholaraio.index import build_index, search
+import json
+
+from scholaraio.index import build_index, lookup_paper, search
 
 
 class TestBuildAndSearch:
@@ -47,3 +49,53 @@ class TestBuildAndSearch:
         # Should still find exactly one match for this query, not duplicates
         turbulence_results = [r for r in results if "Turbulence" in r.get("title", "")]
         assert len(turbulence_results) == 1
+
+
+class TestLookupPaper:
+    """lookup_paper contract: find by UUID, dir_name, DOI, or publication_number."""
+
+    def test_lookup_by_uuid(self, tmp_papers, tmp_db):
+        build_index(tmp_papers, tmp_db)
+        result = lookup_paper(tmp_db, "aaaa-1111")
+        assert result is not None
+        assert result["id"] == "aaaa-1111"
+
+    def test_lookup_by_doi(self, tmp_papers, tmp_db):
+        build_index(tmp_papers, tmp_db)
+        result = lookup_paper(tmp_db, "10.1234/jfm.2023.001")
+        assert result is not None
+        assert result["doi"] == "10.1234/jfm.2023.001"
+
+    def test_lookup_by_publication_number(self, tmp_path, tmp_db):
+        """Patent lookup normalizes to uppercase for matching."""
+        papers_dir = tmp_path / "papers"
+        pa = papers_dir / "Inventor-2023-Patent"
+        pa.mkdir(parents=True)
+        (pa / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "patent-001",
+                    "title": "A patent invention",
+                    "authors": ["Inventor"],
+                    "first_author_lastname": "Inventor",
+                    "year": 2023,
+                    "journal": "",
+                    "doi": "",
+                    "abstract": "Patent abstract.",
+                    "paper_type": "patent",
+                    "ids": {"patent_publication_number": "CN112345678A"},
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        (pa / "paper.md").write_text("# Patent\n\nContent.", encoding="utf-8")
+        build_index(papers_dir, tmp_db)
+        # Lookup with lowercase should still match (normalization)
+        result = lookup_paper(tmp_db, "cn112345678a")
+        assert result is not None
+        assert result["id"] == "patent-001"
+
+    def test_lookup_nonexistent_returns_none(self, tmp_papers, tmp_db):
+        build_index(tmp_papers, tmp_db)
+        assert lookup_paper(tmp_db, "nonexistent-id") is None

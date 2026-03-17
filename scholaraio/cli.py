@@ -34,6 +34,7 @@ cli.py — scholaraio 命令行入口
     scholaraio explore list
     scholaraio explore info [--name NAME]
     scholaraio export bibtex [<paper-id> ...] [--all] [--year Y] [--journal J] [-o FILE]
+    scholaraio translate [<paper-id> | --all] [--lang LANG] [--force]
     scholaraio import-endnote <file.xml|file.ris> [--no-api] [--dry-run] [--no-convert]
     scholaraio import-zotero [--api-key KEY] [--library-id ID] [--local PATH] [--list-collections] ...
     scholaraio attach-pdf <paper-id> <path/to/paper.pdf>
@@ -290,8 +291,23 @@ def cmd_show(args: argparse.Namespace, cfg) -> None:
         if not md_path.exists():
             _log.error("paper.md not found: %s", md_path)
             sys.exit(1)
-        ui("\n--- Full Text ---\n")
-        ui(load_l4(md_path))
+        lang = getattr(args, "lang", None)
+        if lang:
+            from scholaraio.translate import validate_lang
+
+            try:
+                lang = validate_lang(lang)
+            except ValueError:
+                ui(f"错误: 无效的语言代码 '{lang}'")
+                sys.exit(1)
+            translated_path = md_path.parent / f"paper_{lang}.md"
+            if translated_path.exists():
+                ui(f"\n--- Full Text ({lang}) ---\n")
+            else:
+                ui(f"\n--- Full Text (原文, paper_{lang}.md 不存在) ---\n")
+        else:
+            ui("\n--- Full Text ---\n")
+        ui(load_l4(md_path, lang=lang))
         _record_read()
         return
 
@@ -725,6 +741,46 @@ def cmd_shared_refs(args: argparse.Namespace, cfg) -> None:
         else:
             ui(f"[{i}] [{count}x] DOI: {r['target_doi']}")
         ui()
+
+
+def cmd_translate(args: argparse.Namespace, cfg) -> None:
+    from scholaraio.translate import batch_translate, translate_paper
+
+    papers_dir = cfg.papers_dir
+
+    # Determine target language: CLI flag > config default; normalize input
+    target_lang = (args.lang or cfg.translate.target_lang).lower().strip()
+
+    try:
+        from scholaraio.translate import validate_lang
+
+        validate_lang(target_lang)
+    except ValueError:
+        ui(f"错误: 无效的语言代码 '{target_lang}'（应为 2-5 个小写字母，如 zh、en、ja）")
+        sys.exit(1)
+
+    if args.paper_id:
+        paper_d = _resolve_paper(args.paper_id, cfg)
+        tr = translate_paper(paper_d, cfg, target_lang=target_lang, force=args.force)
+        if tr.ok:
+            ui(f"翻译完成: {tr.path}")
+        else:
+            from scholaraio.translate import SKIP_ALREADY_EXISTS, SKIP_EMPTY, SKIP_NO_MD, SKIP_SAME_LANG
+
+            _skip_messages = {
+                SKIP_NO_MD: "跳过: 该论文目录下无 paper.md 文件",
+                SKIP_EMPTY: "跳过: paper.md 内容为空",
+                SKIP_SAME_LANG: f"跳过: 论文已是目标语言 ({target_lang})",
+                SKIP_ALREADY_EXISTS: "跳过: 翻译已存在（使用 --force 强制重新翻译）",
+            }
+            ui(_skip_messages.get(tr.skip_reason, "跳过"))
+    elif args.all:
+        ui(f"批量翻译 → {target_lang}")
+        stats = batch_translate(papers_dir, cfg, target_lang=target_lang, force=args.force)
+        ui(f"完成: {stats['translated']} 已翻译 | {stats['skipped']} 跳过 | {stats['failed']} 失败")
+    else:
+        ui("请指定 <paper-id> 或 --all")
+        sys.exit(1)
 
 
 def cmd_refetch(args: argparse.Namespace, cfg) -> None:
@@ -2512,12 +2568,14 @@ def _print_header(l1: dict) -> None:
     ui(f"year     : {l1.get('year') or '?'}  |  journal: {l1.get('journal') or '?'}")
     if l1.get("doi"):
         ui(f"doi      : {l1['doi']}")
+    ids = l1.get("ids") or {}
+    if ids.get("patent_publication_number"):
+        ui(f"pub_num  : {ids['patent_publication_number']}")
     if l1.get("paper_type"):
         ui(f"type     : {l1['paper_type']}")
     cite_str = _format_citations(l1.get("citation_count") or {})
     if cite_str:
         ui(f"cited    : {cite_str}")
-    ids = l1.get("ids") or {}
     if ids.get("semantic_scholar_url"):
         ui(f"S2       : {ids['semantic_scholar_url']}")
     if ids.get("openalex_url"):
@@ -2621,6 +2679,7 @@ def main() -> None:
         choices=[1, 2, 3, 4],
         help="加载层级：1=元数据, 2=摘要, 3=结论, 4=全文（默认 2）",
     )
+    p_show.add_argument("--lang", type=str, default=None, help="加载翻译版本（如 zh），仅 L4 生效")
 
     # --- embed ---
     p_embed = sub.add_parser("embed", help="生成语义向量写入 index.db")
@@ -2988,6 +3047,14 @@ def main() -> None:
     p_l3.add_argument("--force", action="store_true", help="强制重新提取（覆盖已有结果）")
     p_l3.add_argument("--inspect", action="store_true", help="展示提取过程详情")
     p_l3.add_argument("--max-retries", type=int, default=2, help="最大重试次数（默认 2）")
+
+    # --- translate ---
+    p_trans = sub.add_parser("translate", help="翻译论文 Markdown 到目标语言")
+    p_trans.set_defaults(func=cmd_translate)
+    p_trans.add_argument("paper_id", nargs="?", help="论文 ID（省略则需 --all）")
+    p_trans.add_argument("--all", action="store_true", help="批量翻译所有论文")
+    p_trans.add_argument("--lang", type=str, default=None, help="目标语言（默认读 config translate.target_lang）")
+    p_trans.add_argument("--force", action="store_true", help="强制重新翻译（覆盖已有翻译）")
 
     args = parser.parse_args()
     cfg = load_config()

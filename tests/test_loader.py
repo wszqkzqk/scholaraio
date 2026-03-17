@@ -11,7 +11,7 @@ import json
 from typing import cast
 
 from scholaraio.config import Config
-from scholaraio.loader import L3_SKIP_TYPES, append_notes, enrich_l3, load_l1, load_l2, load_notes
+from scholaraio.loader import L3_SKIP_TYPES, append_notes, enrich_l3, load_l1, load_l2, load_l4, load_notes
 
 # enrich_l3 requires a Config argument but the skip-by-type branch
 # returns before it is used.  We use a typed sentinel so mypy is happy.
@@ -98,6 +98,32 @@ class TestEnrichL3Skip:
         """All documented skip types are present in the set."""
         for t in ("thesis", "book", "monograph", "document", "dissertation"):
             assert t in L3_SKIP_TYPES
+
+
+class TestLoadL4:
+    """L4 contract: returns full markdown text, with optional translated version."""
+
+    def test_returns_original_text(self, tmp_papers):
+        md_path = tmp_papers / "Smith-2023-Turbulence" / "paper.md"
+        result = load_l4(md_path)
+        assert "Turbulence modeling" in result
+
+    def test_prefers_translated_when_lang_specified(self, tmp_papers):
+        paper_dir = tmp_papers / "Smith-2023-Turbulence"
+        (paper_dir / "paper_zh.md").write_text("# 边界层湍流建模\n\n中文全文。", encoding="utf-8")
+        result = load_l4(paper_dir / "paper.md", lang="zh")
+        assert "边界层湍流建模" in result
+
+    def test_falls_back_to_original_when_translation_missing(self, tmp_papers):
+        md_path = tmp_papers / "Smith-2023-Turbulence" / "paper.md"
+        result = load_l4(md_path, lang="fr")
+        assert "Turbulence modeling" in result
+
+    def test_no_lang_returns_original(self, tmp_papers):
+        paper_dir = tmp_papers / "Smith-2023-Turbulence"
+        (paper_dir / "paper_zh.md").write_text("中文", encoding="utf-8")
+        result = load_l4(paper_dir / "paper.md", lang=None)
+        assert "Turbulence modeling" in result
 
 
 class TestNotes:

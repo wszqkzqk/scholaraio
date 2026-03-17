@@ -100,6 +100,8 @@ class InboxCtx:
     status: str = "pending"  # pending | ingested | duplicate | needs_review | failed | skipped
     ingested_json: Path | None = None  # set by step_ingest on success
     is_thesis: bool = False  # thesis inbox or LLM-detected thesis
+    is_patent: bool = False  # patent inbox or detected patent
+    existing_pub_nums: dict[str, Path] | None = None  # patent publication number dedup
 
 
 # ============================================================================
@@ -328,12 +330,14 @@ def step_extract(ctx: InboxCtx) -> StepResult:
 
 
 def step_dedup(ctx: InboxCtx) -> StepResult:
-    """API 查询补全 + DOI 去重检查。
+    """API 查询补全 + DOI / 公开号去重检查。
 
     1. 调用 Crossref / S2 / OpenAlex API 补全元数据
     2. 有 DOI 时检查是否与已入库论文重复
-    3. 无 DOI 时：thesis inbox 标记直接放行；否则依次 LLM 判断是否 thesis / book
-    4. 无 DOI 且非 thesis/book 才转入 ``data/pending/``
+    3. thesis inbox 标记直接放行
+    4. patent inbox 标记 paper_type=patent，按公开号去重；无公开号转 pending
+    5. 无 DOI 时：检测是否为专利（文本中含公开号），是则按公开号去重并入库
+    6. 无 DOI 且非 thesis/patent/book 才转入 ``data/pending/``
 
     Args:
         ctx: Inbox 上下文，需要 ``ctx.meta`` 已设置。
@@ -356,7 +360,36 @@ def step_dedup(ctx: InboxCtx) -> StepResult:
     if ctx.is_thesis:
         ctx.meta.paper_type = "thesis"
         _log.debug("thesis inbox, skipping API and dedup")
-        ui(f"Thesis: {ctx.meta.title or '?'}")
+        ui(f"学位论文: {ctx.meta.title or '?'}")
+        return StepResult.OK
+
+    # Patent inbox: set paper_type, skip API query, use publication_number for dedup
+    if ctx.is_patent:
+        ctx.meta.paper_type = "patent"
+        _log.debug("patent inbox, skipping API query")
+        ui(f"专利: {ctx.meta.title or '?'}")
+        # Patent publication number dedup
+        pub_num = (ctx.meta.publication_number or "").upper().strip()
+        if not pub_num:
+            _log.warning("patent inbox but no publication number extracted: %s", ctx.meta.title or "?")
+            _move_to_pending(
+                ctx,
+                issue="no_pub_num",
+                message="专利 inbox 未提取到公开号，需人工确认",
+            )
+            ctx.status = "needs_review"
+            return StepResult.FAIL
+        if ctx.existing_pub_nums and pub_num in ctx.existing_pub_nums:
+            existing_json = ctx.existing_pub_nums[pub_num]
+            _log.debug("duplicate patent: %s -> %s", pub_num, existing_json.parent.name)
+            _move_to_pending(
+                ctx,
+                issue="duplicate",
+                message="专利公开号与已入库专利重复",
+                extra={"duplicate_of": existing_json.parent.name, "publication_number": pub_num},
+            )
+            ctx.status = "duplicate"
+            return StepResult.FAIL
         return StepResult.OK
 
     # API query
@@ -374,19 +407,45 @@ def step_dedup(ctx: InboxCtx) -> StepResult:
         ctx.meta.doi = ""
         doi = ""
     if not doi or not doi.strip():
+        # No DOI -> check if patent (by publication number or detection)
+        if _detect_patent(ctx):
+            ctx.meta.paper_type = "patent"
+            ctx.is_patent = True
+            pub_num = (ctx.meta.publication_number or "").upper().strip()
+            if not pub_num:
+                # Patent detected but no publication number — needs manual review
+                _move_to_pending(
+                    ctx,
+                    issue="no_pub_num",
+                    message="检测为专利但未提取到公开号，需人工确认",
+                )
+                ctx.status = "needs_review"
+                return StepResult.FAIL
+            if ctx.existing_pub_nums and pub_num in ctx.existing_pub_nums:
+                existing_json = ctx.existing_pub_nums[pub_num]
+                _move_to_pending(
+                    ctx,
+                    issue="duplicate",
+                    message="专利公开号与已入库专利重复",
+                    extra={"duplicate_of": existing_json.parent.name, "publication_number": pub_num},
+                )
+                ctx.status = "duplicate"
+                return StepResult.FAIL
+            ui("检测为专利，无 DOI 直接入库")
+            return StepResult.OK
         # No DOI -> LLM thesis detection
         if _detect_thesis(ctx):
             ctx.meta.paper_type = "thesis"
             ctx.is_thesis = True
-            ui("Detected as thesis, ingesting without DOI")
+            ui("检测为学位论文，无 DOI 直接入库")
             return StepResult.OK
         # No DOI -> LLM book detection
         if _detect_book(ctx):
             ctx.meta.paper_type = "book"
-            ui("Detected as book, ingesting without DOI")
+            ui("检测为书籍，无 DOI 直接入库")
             return StepResult.OK
-        # Not thesis/book -> move to pending
-        _log.debug("no DOI and not thesis/book, moving to pending")
+        # Not thesis/book/patent -> move to pending
+        _log.debug("no DOI and not thesis/book/patent, moving to pending")
         _move_to_pending(ctx)
         ctx.status = "needs_review"
         return StepResult.FAIL
@@ -493,6 +552,9 @@ def step_ingest(ctx: InboxCtx) -> StepResult:
 
     if ctx.meta.doi and ctx.meta.doi.strip():
         ctx.existing_dois[ctx.meta.doi.lower().strip()] = new_json
+    if ctx.meta.publication_number and ctx.meta.publication_number.strip():
+        if ctx.existing_pub_nums is not None:
+            ctx.existing_pub_nums[ctx.meta.publication_number.upper().strip()] = new_json
 
     # Update papers_registry immediately so UUID lookup works before rebuild
     _update_registry(ctx.cfg, ctx.meta, paper_d.name)
@@ -584,6 +646,45 @@ def step_l3(json_path: Path, cfg: Config, opts: dict) -> StepResult:
 # ============================================================================
 #  Global steps
 # ============================================================================
+
+
+def step_translate(json_path: Path, cfg: Config, opts: dict) -> StepResult:
+    """翻译论文 Markdown 到目标语言（papers 作用域）。
+
+    Args:
+        json_path: 论文 JSON 路径（meta.json）。
+        cfg: 全局配置。
+        opts: 运行选项。
+
+    Returns:
+        ``StepResult.OK`` 成功, ``StepResult.SKIP`` 跳过。
+    """
+    from scholaraio.translate import translate_paper
+
+    paper_d = json_path.parent
+    md_path = paper_d / "paper.md"
+    if not md_path.exists():
+        _log.debug("skipping translate (no paper.md): %s", paper_d.name)
+        return StepResult.SKIP
+
+    if opts.get("dry_run"):
+        _log.debug("would translate: %s", paper_d.name)
+        return StepResult.OK
+
+    target_lang = opts.get("translate_lang") or cfg.translate.target_lang
+    try:
+        from scholaraio.translate import validate_lang
+
+        target_lang = validate_lang(target_lang)
+    except ValueError as exc:
+        ui(f"  跳过翻译（语言无效: {exc}）")
+        return StepResult.SKIP
+    force = opts.get("force", False)
+    tr = translate_paper(paper_d, cfg, target_lang=target_lang, force=force)
+    if not tr.ok:
+        return StepResult.SKIP
+    ui(f"  已翻译: {tr.path.name}")  # type: ignore[union-attr]
+    return StepResult.OK
 
 
 def step_embed(papers_dir: Path, cfg: Config, opts: dict) -> StepResult:
@@ -700,6 +801,7 @@ STEPS: dict[str, StepDef] = {
     "ingest": StepDef(fn=step_ingest, scope="inbox", desc="写入 data/papers/"),
     "toc": StepDef(fn=step_toc, scope="papers", desc="LLM 提取 TOC 写入 JSON"),
     "l3": StepDef(fn=step_l3, scope="papers", desc="LLM 提取结论写入 JSON"),
+    "translate": StepDef(fn=step_translate, scope="papers", desc="翻译论文 Markdown 到目标语言"),
     "refetch": StepDef(fn=step_refetch, scope="papers", desc="重新查询 API 补全引用量等字段"),
     "embed": StepDef(fn=step_embed, scope="global", desc="生成语义向量写入 index.db"),
     "index": StepDef(fn=step_index, scope="global", desc="更新 SQLite FTS5 索引"),
@@ -738,6 +840,8 @@ def _process_inbox(
     ingested_jsons: list[Path],
     *,
     is_thesis: bool = False,
+    is_patent: bool = False,
+    existing_pub_nums: dict[str, Path] | None = None,
 ) -> None:
     """处理单个 inbox 目录中的所有文件。
 
@@ -752,6 +856,8 @@ def _process_inbox(
         dry_run: 是否预览模式。
         ingested_jsons: 新入库的 JSON 路径列表（会被原地追加）。
         is_thesis: 是否为 thesis inbox（跳过 DOI 去重，标记 paper_type）。
+        is_patent: 是否为 patent inbox（跳过 DOI 去重，用公开号去重）。
+        existing_pub_nums: 已入库专利公开号映射（用于去重）。
     """
     if not inbox_dir.exists():
         return
@@ -905,6 +1011,8 @@ def _process_inbox(
             pending_dir=pending_dir,
             md_path=paths["md"],
             is_thesis=is_thesis,
+            is_patent=is_patent,
+            existing_pub_nums=existing_pub_nums,
         )
         for step_name in file_steps:
             with timer(f"pipeline.inbox.{step_name}", "step") as t:
@@ -951,8 +1059,11 @@ def run_pipeline(
 
     按 scope 分三阶段依次执行:
       1. **inbox** — 逐个文件: mineru → extract → dedup → ingest
-      2. **papers** — 逐篇已入库论文: toc → l3
+      2. **papers** — 逐篇已入库论文: toc → l3 → translate（auto_translate 开启时自动注入）
       3. **global** — 全局执行一次: embed → index
+
+    当 ``config.translate.auto_translate`` 为 ``True`` 且 pipeline 包含 inbox 步骤时，
+    会在 papers scope 阶段自动注入 translate 步骤（位于 embed/index 之前）。
 
     Args:
         step_names: 步骤名称列表，如 ``["extract", "dedup", "ingest"]``。
@@ -969,6 +1080,18 @@ def run_pipeline(
             - ``inbox_dir`` (Path): 自定义 inbox 目录。
             - ``papers_dir`` (Path): 自定义 papers 目录。
     """
+    # Auto-inject translate step when config.translate.auto_translate is enabled.
+    # Only inject when the pipeline includes inbox steps (i.e. new papers are being ingested),
+    # to avoid triggering LLM translation on unrelated runs like reindex/embed.
+    has_inbox = any(n in STEPS and STEPS[n].scope == "inbox" for n in step_names)
+    if cfg.translate.auto_translate and has_inbox and "translate" not in step_names and "translate" in STEPS:
+        # Insert translate before global-scope steps (embed/index)
+        first_global = next(
+            (i for i, n in enumerate(step_names) if n in STEPS and STEPS[n].scope == "global"),
+            len(step_names),
+        )
+        step_names = [*step_names[:first_global], "translate", *step_names[first_global:]]
+
     # Validate steps
     for name in step_names:
         if name not in STEPS:
@@ -988,7 +1111,7 @@ def run_pipeline(
 
     # ---- Inbox scope ----
     if inbox_steps:
-        existing_dois = _collect_existing_dois(papers_dir)
+        existing_dois, existing_pub_nums = _collect_existing_ids(papers_dir)
 
         # Process regular inbox
         _result = _process_inbox(
@@ -1002,6 +1125,7 @@ def run_pipeline(
             dry_run,
             ingested_jsons,
             is_thesis=False,
+            existing_pub_nums=existing_pub_nums,
         )
 
         # Process thesis inbox (data/inbox-thesis/)
@@ -1018,6 +1142,24 @@ def run_pipeline(
                 dry_run,
                 ingested_jsons,
                 is_thesis=True,
+                existing_pub_nums=existing_pub_nums,
+            )
+
+        # Process patent inbox (data/inbox-patent/)
+        patent_inbox = cfg._root / "data" / "inbox-patent"
+        if patent_inbox.exists():
+            _process_inbox(
+                patent_inbox,
+                papers_dir,
+                pending_dir,
+                existing_dois,
+                inbox_steps,
+                cfg,
+                opts,
+                dry_run,
+                ingested_jsons,
+                is_patent=True,
+                existing_pub_nums=existing_pub_nums,
             )
 
         # Process document inbox (data/inbox-doc/)
@@ -1036,6 +1178,7 @@ def run_pipeline(
                 dry_run,
                 ingested_jsons,
                 is_thesis=False,
+                existing_pub_nums=existing_pub_nums,
             )
 
     # ---- Papers scope ----
@@ -1060,11 +1203,18 @@ def run_pipeline(
             step_times: dict[str, float] = {}
 
             # Concurrent execution for papers_steps when LLM-bound steps
-            # (toc, l3) are present. All papers_steps run per-paper inside
-            # _process_one_paper(); different papers execute in parallel.
-            llm_steps = {"toc", "l3"}
+            # (toc, l3, translate) are present. All papers_steps run per-paper
+            # inside _process_one_paper(); different papers execute in parallel.
+            llm_steps = {"toc", "l3", "translate"}
             has_llm_steps = bool(set(papers_steps) & llm_steps)
-            workers = cfg.llm.concurrency if has_llm_steps else 1
+            if has_llm_steps and "translate" in papers_steps:
+                # When translate coexists with other LLM steps (toc/l3), use the
+                # lower of the two limits to avoid exceeding backend rate limits.
+                workers = min(cfg.translate.concurrency, cfg.llm.concurrency)
+            elif has_llm_steps:
+                workers = cfg.llm.concurrency
+            else:
+                workers = 1
 
             def _process_one_paper(json_path: Path) -> tuple[str, dict[str, float]]:
                 """Process all papers_steps for one paper. Returns (status, timings)."""
@@ -1166,7 +1316,7 @@ def import_external(
     """
     papers_dir = cfg.papers_dir
     pending_dir = cfg._root / "data" / "pending"
-    existing_dois = _collect_existing_dois(papers_dir)
+    existing_dois, existing_pub_nums = _collect_existing_ids(papers_dir)
 
     opts: dict[str, Any] = {"dry_run": dry_run, "no_api": no_api}
     stats: dict[str, int] = {"ingested": 0, "duplicate": 0, "needs_review": 0, "failed": 0, "skipped": 0}
@@ -1189,6 +1339,7 @@ def import_external(
             inbox_dir=cfg._root / "data" / "inbox",  # not actually used
             papers_dir=papers_dir,
             existing_dois=existing_dois,
+            existing_pub_nums=existing_pub_nums,
             cfg=cfg,
             opts=opts,
             pending_dir=pending_dir,
@@ -1467,12 +1618,19 @@ def _batch_postprocess(
     step_index(cfg.papers_dir, cfg, {"dry_run": False, "rebuild": False})
 
 
-def _collect_existing_dois(papers_dir: Path) -> dict[str, Path]:
+def _collect_existing_ids(papers_dir: Path) -> tuple[dict[str, Path], dict[str, Path]]:
+    """Collect existing DOIs and patent publication numbers for dedup.
+
+    Returns:
+        (dois, pub_nums) — DOIs map lowercase key → json_path,
+        pub_nums map uppercase key → json_path.
+    """
     from scholaraio.papers import iter_paper_dirs
 
     dois: dict[str, Path] = {}
+    pub_nums: dict[str, Path] = {}
     if not papers_dir.exists():
-        return dois
+        return dois, pub_nums
     for pdir in iter_paper_dirs(papers_dir):
         json_path = pdir / "meta.json"
         try:
@@ -1480,8 +1638,17 @@ def _collect_existing_dois(papers_dir: Path) -> dict[str, Path]:
             doi = data.get("doi") or (data.get("ids") or {}).get("doi")
             if doi and doi.strip():
                 dois[doi.lower().strip()] = json_path
+            pub_num = (data.get("ids") or {}).get("patent_publication_number", "")
+            if pub_num and pub_num.strip():
+                pub_nums[pub_num.upper().strip()] = json_path
         except Exception as e:
             _log.debug("failed to read %s: %s", json_path.name, e)
+    return dois, pub_nums
+
+
+def _collect_existing_dois(papers_dir: Path) -> dict[str, Path]:
+    """Backward-compatible wrapper returning only DOIs."""
+    dois, _ = _collect_existing_ids(papers_dir)
     return dois
 
 
@@ -1503,6 +1670,51 @@ def _parse_detect_json(text: str) -> dict:
         except json.JSONDecodeError:
             pass
     return {}
+
+
+def _detect_patent(ctx: InboxCtx) -> bool:
+    """Detect if a no-DOI document is a patent.
+
+    Checks publication_number from extractor first (fast path),
+    then scans text for patent keywords.
+
+    Args:
+        ctx: Inbox context with ``ctx.meta`` set.
+
+    Returns:
+        ``True`` if document is a patent.
+    """
+    if ctx.meta and ctx.meta.publication_number:
+        _log.debug("patent detected by publication_number: %s", ctx.meta.publication_number)
+        return True
+
+    # Fast heuristic: paper_type already set
+    if ctx.meta and ctx.meta.paper_type and ctx.meta.paper_type.lower().strip() == "patent":
+        return True
+
+    # Title keyword check
+    title = (ctx.meta.title or "").lower() if ctx.meta else ""
+    for keyword in ("patent", "专利", "发明专利", "实用新型", "utility model"):
+        if keyword in title:
+            _log.debug("patent detected by title keyword: %s", keyword)
+            return True
+
+    # Scan text for patent number patterns
+    if ctx.md_path and ctx.md_path.exists():
+        try:
+            text = ctx.md_path.read_text(encoding="utf-8", errors="replace")[:10000]
+            from scholaraio.ingest.metadata._models import PATENT_NUMBER_RE
+
+            m = PATENT_NUMBER_RE.search(text)
+            if m:
+                if ctx.meta and not ctx.meta.publication_number:
+                    ctx.meta.publication_number = m.group(1).upper()
+                _log.debug("patent detected by publication number in text: %s", m.group(1))
+                return True
+        except Exception as e:
+            _log.debug("failed to scan for patent number: %s", e)
+
+    return False
 
 
 def _detect_thesis(ctx: InboxCtx) -> bool:
@@ -1707,7 +1919,7 @@ def _move_to_pending(
 
     Args:
         ctx: Inbox 上下文。
-        issue: 问题类型标识（``"no_doi"`` | ``"duplicate"``）。
+        issue: 问题类型标识（``"no_doi"`` | ``"no_pub_num"`` | ``"duplicate"``）。
         message: 人类可读的问题描述。
         extra: 附加信息写入 pending.json（如重复论文的已有路径）。
     """
@@ -1775,6 +1987,41 @@ def _repair_abstract(json_path: Path, md_path: Path, cfg: Config) -> None:
         _log.debug("abstract backfilled from MD (%d chars)", len(abstract))
 
 
+_registry_migrated: set[Path] = set()
+
+
+def _ensure_registry_schema(conn, db_path: Path) -> None:
+    """Run publication_number column migration once per db_path per process."""
+    import sqlite3
+
+    if db_path in _registry_migrated:
+        return
+    try:
+        conn.execute("SELECT publication_number FROM papers_registry LIMIT 0")
+    except sqlite3.OperationalError:
+        conn.execute("ALTER TABLE papers_registry ADD COLUMN publication_number TEXT")
+    # Ensure UNIQUE partial index exists (matches index.py schema).
+    # Pre-migration data may contain duplicates, so catch IntegrityError
+    # and fall back to a non-unique index rather than silently breaking.
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_registry_publication_number "
+            "ON papers_registry(publication_number) "
+            "WHERE publication_number IS NOT NULL AND publication_number != ''"
+        )
+    except sqlite3.IntegrityError:
+        _log.warning(
+            "Duplicate publication_number values found; "
+            "creating non-unique index. Run 'scholaraio index' to rebuild."
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_registry_publication_number "
+            "ON papers_registry(publication_number) "
+            "WHERE publication_number IS NOT NULL AND publication_number != ''"
+        )
+    _registry_migrated.add(db_path)
+
+
 def _update_registry(cfg, meta, dir_name: str) -> None:
     """Insert/update papers_registry so UUID lookup works immediately."""
     import sqlite3
@@ -1784,12 +2031,62 @@ def _update_registry(cfg, meta, dir_name: str) -> None:
         return
     try:
         with sqlite3.connect(db_path) as conn:
-            conn.execute(
-                """INSERT OR REPLACE INTO papers_registry
-                   (id, dir_name, title, doi, year, first_author)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (meta.id, dir_name, meta.title or "", meta.doi or "", meta.year, meta.first_author_lastname or ""),
-            )
+            _ensure_registry_schema(conn, db_path)
+            pub_num = (getattr(meta, "publication_number", "") or "").upper().strip()
+            doi_norm = (meta.doi or "").lower().strip()
+            try:
+                conn.execute(
+                    """INSERT INTO papers_registry
+                       (id, dir_name, title, doi, publication_number, year, first_author)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)
+                       ON CONFLICT(id) DO UPDATE SET
+                           dir_name=excluded.dir_name,
+                           title=excluded.title,
+                           doi=excluded.doi,
+                           publication_number=excluded.publication_number,
+                           year=excluded.year,
+                           first_author=excluded.first_author""",
+                    (
+                        meta.id,
+                        dir_name,
+                        meta.title or "",
+                        doi_norm,
+                        pub_num,
+                        meta.year,
+                        meta.first_author_lastname or "",
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                err_msg = str(exc).lower()
+                if "publication_number" in err_msg and pub_num:
+                    _log.warning(
+                        "publication_number %r for %s conflicts; storing without it",
+                        pub_num,
+                        meta.id,
+                    )
+                    conn.execute(
+                        """INSERT INTO papers_registry
+                           (id, dir_name, title, doi, publication_number, year, first_author)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)
+                           ON CONFLICT(id) DO UPDATE SET
+                               dir_name=excluded.dir_name,
+                               title=excluded.title,
+                               doi=excluded.doi,
+                               publication_number=excluded.publication_number,
+                               year=excluded.year,
+                               first_author=excluded.first_author""",
+                        (
+                            meta.id,
+                            dir_name,
+                            meta.title or "",
+                            doi_norm,
+                            "",
+                            meta.year,
+                            meta.first_author_lastname or "",
+                        ),
+                    )
+                else:
+                    _log.warning("IntegrityError in _update_registry for %s: %s", meta.id, exc)
     except Exception as e:
         _log.debug("failed to update papers_registry: %s", e)
 

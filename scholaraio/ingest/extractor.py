@@ -70,7 +70,11 @@ class RegexExtractor:
     def extract(self, filepath: Path) -> PaperMetadata:
         from scholaraio.ingest.metadata import extract_metadata_from_markdown
 
-        return extract_metadata_from_markdown(filepath)
+        # Read file once; pass text to both metadata extraction and patent check
+        text = filepath.read_text(encoding="utf-8", errors="replace")
+        meta = extract_metadata_from_markdown(filepath, text=text)
+        _extract_patent_number(meta, text)
+        return meta
 
 
 # ============================================================================
@@ -163,6 +167,9 @@ class LLMExtractor:
             meta.first_author_lastname = fb.first_author_lastname
         if not meta.first_author:
             meta.first_author = fb.first_author
+
+        # Patent number extraction from full text
+        _extract_patent_number(meta, text)
 
         return meta
 
@@ -359,6 +366,9 @@ class RobustExtractor:
         if not meta.first_author:
             meta.first_author = fb.first_author
 
+        # Patent number extraction from full text
+        _extract_patent_number(meta, text)
+
         return meta
 
     def _call_api(self, prompt: str) -> str:
@@ -371,6 +381,24 @@ class RobustExtractor:
             purpose="extract.robust",
         )
         return result.content
+
+
+# ============================================================================
+#  Patent number extraction
+# ============================================================================
+
+
+def _extract_patent_number(meta, text: str) -> None:
+    """Extract patent publication number from text and set paper_type if patent."""
+    from scholaraio.ingest.metadata._models import PATENT_NUMBER_RE
+
+    m = PATENT_NUMBER_RE.search(text[:10000])
+    if m and not meta.publication_number:
+        meta.publication_number = m.group(1).upper()
+    # Heuristic: if publication_number found and no DOI, likely a patent
+    if meta.publication_number and not meta.doi:
+        if not meta.paper_type or meta.paper_type in ("", "article"):
+            meta.paper_type = "patent"
 
 
 # ============================================================================

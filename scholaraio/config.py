@@ -172,6 +172,23 @@ class IngestConfig:
 
 
 @dataclass
+class TranslateConfig:
+    """论文自动翻译配置。
+
+    Attributes:
+        auto_translate: 入库时是否自动翻译非目标语言的论文。
+        target_lang: 翻译目标语言代码（``"zh"`` | ``"en"`` 等）。
+        chunk_size: 分块翻译时每块最大字符数（避免超 LLM token 限制）。
+        concurrency: 并发翻译数。
+    """
+
+    auto_translate: bool = False
+    target_lang: str = "zh"
+    chunk_size: int = 4000
+    concurrency: int = 5
+
+
+@dataclass
 class ZoteroConfig:
     """Zotero 集成配置。
 
@@ -208,6 +225,7 @@ class Config:
     search: SearchConfig = field(default_factory=SearchConfig)
     topics: TopicsConfig = field(default_factory=TopicsConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    translate: TranslateConfig = field(default_factory=TranslateConfig)
     zotero: ZoteroConfig = field(default_factory=ZoteroConfig)
 
     # Root directory of the config file (used to resolve relative paths)
@@ -244,6 +262,7 @@ class Config:
             self.papers_dir,
             self._root / "data" / "inbox",
             self._root / "data" / "inbox-thesis",
+            self._root / "data" / "inbox-patent",
             self._root / "data" / "inbox-doc",
             self._root / "data" / "pending",
             self._root / "workspace",
@@ -457,6 +476,14 @@ def _build_config(data: dict, root: Path) -> Config:
         metrics_db=log_data.get("metrics_db", "data/metrics.db"),
     )
 
+    translate_data = data.get("translate", {}) or {}
+    translate = TranslateConfig(
+        auto_translate=bool(translate_data.get("auto_translate", False)),
+        target_lang=translate_data.get("target_lang", "zh"),
+        chunk_size=int(translate_data.get("chunk_size", 4000)),
+        concurrency=max(1, int(translate_data.get("concurrency", 5))),
+    )
+
     zotero_data = data.get("zotero", {}) or {}
     zotero = ZoteroConfig(
         api_key=zotero_data.get("api_key") or "",
@@ -472,6 +499,7 @@ def _build_config(data: dict, root: Path) -> Config:
         search=search,
         topics=topics,
         log=log,
+        translate=translate,
         zotero=zotero,
         _root=root,
     )
