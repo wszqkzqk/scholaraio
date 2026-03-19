@@ -120,6 +120,9 @@ def _resolve_ws_paper_ids(args: argparse.Namespace, cfg) -> set[str] | None:
         return None
     from scholaraio import workspace
 
+    if not workspace.validate_workspace_name(ws_name):
+        raise ValueError(f"非法工作区名称: {ws_name}")
+
     ws_dir = cfg._root / "workspace" / ws_name
     pids = workspace.read_paper_ids(ws_dir)
     if not pids:
@@ -1204,9 +1207,15 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
             ui("暂无 explore 库，请先运行 scholaraio explore fetch --issn <ISSN> 创建。")
             return
         for d in sorted(explore_root.iterdir()):
+            if not d.is_dir():
+                continue
             meta_file = d / "meta.json"
             if meta_file.exists():
-                meta = _json.loads(meta_file.read_text("utf-8"))
+                try:
+                    meta = _json.loads(meta_file.read_text("utf-8"))
+                except (OSError, _json.JSONDecodeError) as e:
+                    ui(f"  {d.name}: meta.json 读取失败，已跳过（{e}）")
+                    continue
                 query = meta.get("query", {})
                 if query:
                     qinfo = ", ".join(f"{k}={v}" for k, v in query.items())
@@ -1227,9 +1236,15 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
                 ui("暂无 explore 库，请先运行 scholaraio explore fetch --issn <ISSN> 创建。")
                 return
             for d in sorted(explore_root.iterdir()):
+                if not d.is_dir():
+                    continue
                 meta_file = d / "meta.json"
                 if meta_file.exists():
-                    meta = _json.loads(meta_file.read_text("utf-8"))
+                    try:
+                        meta = _json.loads(meta_file.read_text("utf-8"))
+                    except (OSError, _json.JSONDecodeError) as e:
+                        ui(f"  {d.name}: meta.json 读取失败，已跳过（{e}）")
+                        continue
                     # Show query info (backward compatible with old ISSN-only format)
                     query = meta.get("query", {})
                     if query:
@@ -1244,7 +1259,11 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
 
         meta_file = cfg._root / "data" / "explore" / args.name / "meta.json"
         if meta_file.exists():
-            meta = _json.loads(meta_file.read_text("utf-8"))
+            try:
+                meta = _json.loads(meta_file.read_text("utf-8"))
+            except (OSError, _json.JSONDecodeError) as e:
+                ui(f"读取 {meta_file} 失败：{e}")
+                return
             ui(f"Explore library: {args.name}")
             for k, v in meta.items():
                 ui(f"  {k}: {v}")
@@ -1500,6 +1519,18 @@ def cmd_ws(args: argparse.Namespace, cfg) -> None:
 
     ws_root = cfg._root / "workspace"
     action = args.ws_action
+
+    # Validate workspace-name style arguments in CLI layer to prevent path traversal.
+    names_to_check: list[str] = []
+    if action in {"init", "add", "remove", "show", "search", "export"}:
+        names_to_check.append(args.name)
+    elif action == "rename":
+        names_to_check.extend([args.old_name, args.new_name])
+
+    for name in names_to_check:
+        if not workspace.validate_workspace_name(name):
+            ui(f"非法工作区名称: {name}")
+            return
 
     if action == "init":
         ws_dir = ws_root / args.name
@@ -2611,7 +2642,11 @@ def cmd_citation_check(args: argparse.Namespace, cfg) -> None:
 
     ui(f"提取到 {len(citations)} 条引用，正在验证…\n")
 
-    paper_ids = _resolve_ws_paper_ids(args, cfg)
+    try:
+        paper_ids = _resolve_ws_paper_ids(args, cfg)
+    except ValueError as e:
+        ui(str(e))
+        return
 
     results = check_citations(
         citations,

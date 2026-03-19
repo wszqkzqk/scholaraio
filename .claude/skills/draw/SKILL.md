@@ -38,13 +38,13 @@ tags: ["academic", "diagram", "vector-graphics", "visualization"]
 **方式 C：直接嵌入 Markdown（零依赖，首选）**
 
 无需任何渲染工具，直接在 Markdown 中写：
-```markdown
+````markdown
 ```mermaid
 flowchart TD
     A --> B
     B --> C
 ```
-```
+````
 Claude Code 的预览会自动渲染。输出到 `.md` 文件时也可直接查看（GitHub/Obsidian 等均支持）。
 
 **方式 D：mmdc 本地渲染为 PNG/SVG（需本地安装）**
