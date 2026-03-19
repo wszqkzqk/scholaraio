@@ -161,8 +161,10 @@ def _build_filter(
         parts.append(f"primary_location.source.type:{source_type}")
     if year_range:
         parts.append(f"publication_year:{year_range}")
-    if min_citations is not None:
-        parts.append(f"cited_by_count:>={min_citations}")
+    # OpenAlex cited_by_count filter expects a meaningful lower bound.
+    # Non-positive values are treated as "no filter" to avoid invalid/odd expressions.
+    if min_citations is not None and min_citations > 0:
+        parts.append(f"cited_by_count:>{min_citations - 1}")
     if oa_type:
         parts.append(f"type:{oa_type}")
 
@@ -268,6 +270,7 @@ def fetch_explore(
     min_citations: int | None = None,
     oa_type: str | None = None,
     incremental: bool = False,
+    limit: int | None = None,
     cfg: Config | None = None,
 ) -> int:
     """从 OpenAlex 批量拉取论文（支持多维度 filter）。
@@ -288,11 +291,15 @@ def fetch_explore(
         min_citations: 最小引用量过滤。
         oa_type: OpenAlex work type 过滤（article / review 等）。
         incremental: 为 ``True`` 时追加到现有 JSONL，基于 DOI 去重。
+        limit: 最多拉取的论文数量上限（``None`` 表示无限制）。
         cfg: 可选的全局配置。
 
     Returns:
         本次新拉取的论文数量。
     """
+    if limit is not None and limit <= 0:
+        raise ValueError(f"limit 必须为正整数，当前为: {limit}")
+
     out_dir = _explore_dir(name, cfg)
     out_dir.mkdir(parents=True, exist_ok=True)
     papers_file = _papers_path(name, cfg)
@@ -336,6 +343,8 @@ def fetch_explore(
         try:
             page = 0
             while cursor:
+                if limit is not None and total >= limit:
+                    break
                 page += 1
                 papers, cursor = _fetch_page(
                     filt,
@@ -345,7 +354,10 @@ def fetch_explore(
                 )
                 if not papers:
                     break
+                written = 0
                 for p in papers:
+                    if limit is not None and total >= limit:
+                        break
                     # Skip duplicates in incremental mode (by DOI or openalex_id)
                     if incremental:
                         pid = p.get("doi", "").lower() or p.get("openalex_id", "")
@@ -353,11 +365,19 @@ def fetch_explore(
                             continue
                     f_handle.write(json.dumps(p, ensure_ascii=False) + "\n")
                     total += 1
+                    written += 1
                     if incremental:
                         pid = p.get("doi", "").lower() or p.get("openalex_id", "")
                         if pid:
                             existing_pids.add(pid)
-                _log.info("page %d: +%d papers (total %d, %.0fs)", page, len(papers), total, t.elapsed)
+                _log.info(
+                    "page %d: fetched=%d, written=%d (total %d, %.0fs)",
+                    page,
+                    len(papers),
+                    written,
+                    total,
+                    t.elapsed,
+                )
         finally:
             f_handle.close()
 

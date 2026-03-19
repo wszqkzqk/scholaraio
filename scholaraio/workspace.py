@@ -186,6 +186,42 @@ def list_workspaces(ws_root: Path) -> list[str]:
     return sorted(d.name for d in ws_root.iterdir() if d.is_dir() and _papers_json(d).exists())
 
 
+def validate_workspace_name(name: str) -> bool:
+    """Return True if *name* is a safe workspace identifier.
+
+    Rejects empty names, ``.``/``..`` names, leading/trailing whitespace,
+    absolute paths, path separators, Windows drive-like names (``:``),
+    and any name containing ``..`` to prevent path traversal outside
+    ``workspace/``.
+
+    Args:
+        name: Candidate workspace name from user input.
+
+    Returns:
+        ``True`` when the name is safe for path construction.
+    """
+    if not name:
+        return False
+    normalized = name.strip()
+    if not normalized:
+        return False
+    # Reject names with leading/trailing whitespace to avoid ambiguity.
+    if normalized != name:
+        return False
+    if normalized in {".", ".."}:
+        return False
+    import os
+
+    if os.path.isabs(normalized):
+        return False
+    # Reject Windows drive-like paths (e.g., C:foo).
+    if ":" in normalized:
+        return False
+    if "/" in normalized or "\\" in normalized:
+        return False
+    return ".." not in normalized
+
+
 def show(ws_dir: Path, db_path: Path) -> list[dict]:
     """查看工作区论文列表，刷新过期的 dir_name。
 
@@ -220,6 +256,40 @@ def read_paper_ids(ws_dir: Path) -> set[str]:
         UUID 字符串集合，用于搜索过滤。
     """
     return {e["id"] for e in _read(ws_dir)}
+
+
+def rename(ws_root: Path, old_name: str, new_name: str) -> Path:
+    """重命名工作区。
+
+    Args:
+        ws_root: workspace/ 根目录。
+        old_name: 当前工作区名称。
+        new_name: 新工作区名称。
+
+    Returns:
+        重命名后的工作区目录路径。
+
+    Raises:
+        ValueError: 工作区名称非法（路径穿越/绝对路径等）。
+        FileNotFoundError: 源工作区不存在。
+        FileExistsError: 目标工作区已存在。
+    """
+    if not validate_workspace_name(old_name):
+        raise ValueError(f"非法工作区名称: {old_name}")
+    if not validate_workspace_name(new_name):
+        raise ValueError(f"非法工作区名称: {new_name}")
+    old_dir = ws_root / old_name
+    new_dir = ws_root / new_name
+    if not old_dir.exists():
+        raise FileNotFoundError(f"工作区不存在: {old_name}")
+    if not old_dir.is_dir():
+        raise ValueError(f"不是有效工作区目录: {old_name}")
+    if not _papers_json(old_dir).exists():
+        raise ValueError(f"缺少 papers.json，无法重命名工作区: {old_name}")
+    if new_dir.exists():
+        raise FileExistsError(f"目标工作区已存在: {new_name}")
+    old_dir.rename(new_dir)
+    return new_dir
 
 
 def read_dir_names(ws_dir: Path, db_path: Path) -> set[str]:

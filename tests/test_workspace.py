@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import json
 
-from scholaraio.workspace import add, create, list_workspaces, read_paper_ids
+import pytest
+
+from scholaraio.workspace import add, create, list_workspaces, read_paper_ids, rename, validate_workspace_name
 
 
 class TestWorkspaceCreate:
@@ -99,3 +101,76 @@ class TestListWorkspaces:
 
         names = list_workspaces(ws_root)
         assert names == ["real"]
+
+
+class TestRenameWorkspace:
+    """rename contract: moves workspace and validates source/target."""
+
+    def test_rename_success(self, tmp_path):
+        ws_root = tmp_path / "workspace"
+        create(ws_root / "old")
+
+        new_dir = rename(ws_root, "old", "new")
+
+        assert new_dir == ws_root / "new"
+        assert (ws_root / "new" / "papers.json").exists()
+        assert not (ws_root / "old").exists()
+
+    def test_rename_missing_source_raises(self, tmp_path):
+        ws_root = tmp_path / "workspace"
+        ws_root.mkdir(parents=True, exist_ok=True)
+
+        with pytest.raises(FileNotFoundError, match="工作区不存在"):
+            rename(ws_root, "missing", "new")
+
+    def test_rename_target_exists_raises(self, tmp_path):
+        ws_root = tmp_path / "workspace"
+        create(ws_root / "old")
+        create(ws_root / "new")
+
+        with pytest.raises(FileExistsError, match="目标工作区已存在"):
+            rename(ws_root, "old", "new")
+
+    def test_rename_source_is_not_directory_raises(self, tmp_path):
+        ws_root = tmp_path / "workspace"
+        ws_root.mkdir(parents=True, exist_ok=True)
+        (ws_root / "old").write_text("not a directory", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="不是有效工作区目录"):
+            rename(ws_root, "old", "new")
+
+    def test_rename_source_without_papers_json_raises(self, tmp_path):
+        ws_root = tmp_path / "workspace"
+        (ws_root / "old").mkdir(parents=True, exist_ok=True)
+
+        with pytest.raises(ValueError, match=r"缺少 papers\.json"):
+            rename(ws_root, "old", "new")
+
+    def test_rename_rejects_invalid_old_name(self, tmp_path):
+        ws_root = tmp_path / "workspace"
+        create(ws_root / "old")
+
+        with pytest.raises(ValueError, match="非法工作区名称"):
+            rename(ws_root, "../old", "new")
+
+    def test_rename_rejects_invalid_new_name(self, tmp_path):
+        ws_root = tmp_path / "workspace"
+        create(ws_root / "old")
+
+        with pytest.raises(ValueError, match="非法工作区名称"):
+            rename(ws_root, "old", "../new")
+
+
+class TestValidateWorkspaceName:
+    def test_accepts_regular_name(self):
+        assert validate_workspace_name("my-ws_2026")
+
+    def test_rejects_empty_or_path_like_name(self):
+        assert not validate_workspace_name("")
+        assert not validate_workspace_name("   ")
+        assert not validate_workspace_name(".")
+        assert not validate_workspace_name("../foo")
+        assert not validate_workspace_name("foo/bar")
+        assert not validate_workspace_name("foo\\bar")
+        assert not validate_workspace_name("C:foo")
+        assert not validate_workspace_name(" ws ")

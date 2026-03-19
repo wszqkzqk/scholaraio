@@ -58,18 +58,29 @@ scholaraio ws list
 scholaraio ws show <名称>
 ```
 
+### 重命名工作区
+
+```bash
+scholaraio ws rename <旧名称> <新名称>
+```
+
 ### 在工作区内搜索
 
 ```bash
-scholaraio ws search <名称> "<查询词>" [--top N] [--year YYYY] [--journal 期刊名]
+scholaraio ws search <名称> "<查询词>" [--top N] [--year YYYY] [--journal 期刊名] [--type 类型] [--mode unified|keyword|semantic]
 ```
 
-使用融合检索（关键词 + 语义），范围限定在工作区论文内。
+搜索模式：
+- `unified`（默认）：融合检索（关键词 + 语义 RRF 排序）
+- `keyword`：FTS5 关键词检索
+- `semantic`：FAISS 语义向量检索
+
+范围限定在工作区论文内。
 
 ### 导出工作区 BibTeX
 
 ```bash
-scholaraio ws export <名称> [--year YYYY] [--journal 期刊名]
+scholaraio ws export <名称> [-o 输出文件] [--year YYYY] [--journal 期刊名] [--type 类型]
 ```
 
 ## Context 管理
@@ -94,6 +105,12 @@ scholaraio ws export <名称> [--year YYYY] [--journal 期刊名]
 
 用户说："在工作区里搜 turbulent boundary layer"
 → 执行 `ws search drag-reduction "turbulent boundary layer"`
+
+用户说："用关键词在工作区里搜"
+→ 执行 `ws search drag-reduction "turbulent boundary layer" --mode keyword`
+
+用户说："把工作区改个名"
+→ 执行 `ws rename drag-reduction turbulence-control`
 
 用户说："导出工作区的引用"
 → 执行 `ws export drag-reduction`

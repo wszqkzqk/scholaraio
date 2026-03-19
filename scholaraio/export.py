@@ -119,6 +119,7 @@ def export_bibtex(
     paper_ids: list[str] | None = None,
     year: str | None = None,
     journal: str | None = None,
+    paper_type: str | None = None,
 ) -> str:
     """Export papers to BibTeX format.
 
@@ -127,6 +128,7 @@ def export_bibtex(
         paper_ids: Specific paper dir names to export. None = all.
         year: Year filter (e.g. "2023", "2020-2024").
         journal: Journal name filter (case-insensitive substring).
+        paper_type: Paper type filter (case-insensitive substring).
 
     Returns:
         Complete BibTeX string with all matching entries.
@@ -149,6 +151,8 @@ def export_bibtex(
         if year_end is not None and (meta_yr or 9999) > year_end:
             continue
         if journal and journal.lower() not in (meta.get("journal") or "").lower():
+            continue
+        if paper_type and paper_type.lower() not in (meta.get("paper_type") or "").lower():
             continue
 
         entries.append(meta_to_bibtex(meta))

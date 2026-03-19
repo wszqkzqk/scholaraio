@@ -98,6 +98,7 @@ def _index_hash(meta: dict) -> str:
         meta.get("l3_conclusion") or "",
         meta.get("doi") or "",
         meta.get("paper_type") or "",
+        ((meta.get("ids") or {}).get("patent_publication_number", "") or ""),
     ]
     cc = meta.get("citation_count")
     if cc and isinstance(cc, dict):
@@ -237,6 +238,7 @@ def build_index(papers_dir: Path, db_path: Path, rebuild: bool = False) -> int:
             dir_name = pdir.name
             pub_num = ((meta.get("ids") or {}).get("patent_publication_number", "") or "").upper().strip()
             try:
+                doi_norm = (meta.get("doi") or "").lower().strip()
                 conn.execute(
                     """INSERT INTO papers_registry
                        (id, dir_name, title, doi, publication_number, year, first_author)
@@ -252,7 +254,7 @@ def build_index(papers_dir: Path, db_path: Path, rebuild: bool = False) -> int:
                         paper_id,
                         dir_name,
                         meta.get("title") or "",
-                        meta.get("doi") or "",
+                        doi_norm,
                         pub_num,
                         meta.get("year"),
                         meta.get("first_author_lastname") or "",
@@ -285,7 +287,7 @@ def build_index(papers_dir: Path, db_path: Path, rebuild: bool = False) -> int:
                             paper_id,
                             dir_name,
                             meta.get("title") or "",
-                            meta.get("doi") or "",
+                            doi_norm,
                             "",  # clear conflicting pub_num
                             meta.get("year"),
                             meta.get("first_author_lastname") or "",
@@ -625,12 +627,18 @@ def lookup_paper(db_path: Path, user_input: str) -> dict | None:
         row = conn.execute("SELECT * FROM papers_registry WHERE dir_name = ?", (user_input,)).fetchone()
         if row:
             return dict(row)
-        # Try DOI (normalize: strip + lowercase for case-insensitive match)
+        # Try DOI (new DBs store lowercase DOI; old DBs may still contain mixed case)
         normalized_doi = user_input.strip().lower()
         row = conn.execute(
-            "SELECT * FROM papers_registry WHERE LOWER(doi) = ?",
+            "SELECT * FROM papers_registry WHERE doi = ?",
             (normalized_doi,),
         ).fetchone()
+        if not row:
+            # Backward compatibility for pre-normalization registries.
+            row = conn.execute(
+                "SELECT * FROM papers_registry WHERE LOWER(doi) = ?",
+                (normalized_doi,),
+            ).fetchone()
         if row:
             return dict(row)
         # Try patent publication number (normalize to uppercase)

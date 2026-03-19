@@ -50,6 +50,8 @@ scholaraio show "<paper-id>" --layer 4 --lang zh
 scholaraio pipeline --steps toc,l3,translate
 ```
 
+> **注意**：`translate` 默认不在预设（`full`/`ingest`/`enrich`/`reindex`）中；可通过 `--steps` 显式指定。若 `config.translate.auto_translate=true` 且 pipeline 包含 inbox 步骤，`translate` 会在 papers 阶段自动注入。
+
 ## 工作流程
 
 1. 检测论文原文语言（基于字符集启发式检测）

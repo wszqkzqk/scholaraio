@@ -93,6 +93,12 @@ scholaraio explore search --name <名称> "<查询词>" --mode unified
 scholaraio explore viz --name <名称>
 ```
 
+### 列出所有探索库
+
+```bash
+scholaraio explore list
+```
+
 ### 查看探索库信息
 
 ```bash
@@ -123,4 +129,4 @@ scholaraio explore info --name <名称>
 → 执行 `explore fetch --issn 0022-1120 --name jfm --incremental`
 
 用户说："我有哪些探索库"
-→ 执行 `explore info`
+→ 执行 `explore list`（或 `explore info`）

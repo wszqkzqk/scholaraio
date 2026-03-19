@@ -16,11 +16,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Insights analytics** (`scholaraio insights`): behavior dashboard showing top search keywords, most-read papers, weekly reading trend, semantic neighbor recommendations, and active workspaces with paper counts
 - **Metrics recording for search/read**: `search`, `usearch`, `vsearch`, and `show` commands now record events to `metrics.db` for behavior analysis
 - **`MetricsStore.query_distinct_names()`**: efficient distinct-name query with supporting `(category, name)` index, used by insights recommendations
-- **Skill YAML front matter**: all 23 skills now carry standardized `version`/`author`/`license`/`tags` metadata; new `insights` skill added
+- **Skill YAML front matter**: all 26 skills now carry standardized `version`/`author`/`license`/`tags` metadata; new `insights` and `document` skills added
 - **clawhub.yaml**: marketplace manifest listing all available skills for discovery
+- **`explore fetch --limit`**: cap the number of papers fetched from OpenAlex (useful for quick sampling)
+- **`attach-pdf --dry-run`**: preview what `attach-pdf` will do without actually running MinerU conversion
+- **`document inspect`** (`scholaraio document inspect <file>`): inspect Office documents (DOCX/PPTX/XLSX) showing structure, layout, content preview, and overflow warnings; new `document.py` module with `inspect_pptx`/`inspect_docx`/`inspect_xlsx` functions
 
 ### Fixed
 
+- **Chicago citation format**: empty authors list no longer causes `IndexError`; condition reordered to check `not authors` first (consistent with APA/Vancouver)
 - **Federated search DOI annotation**: `WHERE doi IN (...)` replaced with `WHERE LOWER(doi) IN (...)` in both `cli.py` and `mcp_server.py`, preventing false negatives when stored DOIs have different casing
 - **`insights --days` validation**: replaced `args.days or 30` with explicit `days <= 0` check; `--days 0` or negative values now produce a clear error instead of silently defaulting to 30
 

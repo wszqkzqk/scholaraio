@@ -82,12 +82,14 @@ When the main agent delegates paper analysis to a subagent, information flows at
 | `loader.py` | L1-L4 layered loading + enrich_toc + enrich_l3 |
 | `explore.py` | Multi-dimensional literature exploration (OpenAlex multi-filter + keyword + semantic + unified search + topics, isolated in `data/explore/`) |
 | `workspace.py` | Workspace paper subset management (reuses search/export) |
+| `document.py` | Office document inspection (DOCX / PPTX / XLSX structure, layout, overflow detection) |
 | `export.py` | BibTeX / RIS / Markdown bibliography / DOCX export |
 | `citation_styles.py` | Citation style management (built-in APA/Vancouver/Chicago/MLA + dynamically loaded custom styles, stored in `data/citation_styles/`) |
+| `citation_check.py` | Citation verification (extract author-year citations from text + cross-check against local KB) |
 | `audit.py` | Data quality audit + repair |
-| `sources/` | Data source adapters (local / endnote / zotero) |
+| `sources/` | Data source adapters (local / endnote / zotero / arxiv) |
 | `cli.py` | Full CLI entry point |
-| `mcp_server.py` | MCP server (31 tools) |
+| `mcp_server.py` | MCP server (32 tools) |
 | `setup.py` | Environment detection + setup wizard |
 | `metrics.py` | LLM token usage + API timing |
 | `translate.py` | Paper translation (language detection + LLM chunked translation + batch translation) |
@@ -242,6 +244,8 @@ data/pending/
 Note: Theses are auto-ingested (from thesis inbox or LLM classification) and never go to pending.
 Patents are auto-ingested (from patent inbox), deduplicated by publication number, and never go to pending (except when no publication number is extracted).
 
+**Note**: The `missing_md` issue reported by `audit` is a quality problem for already-ingested papers in `data/papers/` (no full-text markdown), unrelated to `data/pending/` status. Pending only holds papers blocked during ingestion (missing DOI or duplicate); `missing_md` means ingested but not yet parsed by MinerU, so full-text search is unavailable.
+
 ### data/explore/ Directory
 
 ```
@@ -298,10 +302,10 @@ Three backend protocols supported: `openai-compat` (DeepSeek / OpenAI / vLLM / O
 
 Skills are defined in `.claude/skills/` directory (also discoverable via `.agents/skills/` symlink), following the [Agent Skills](https://agentskills.io) open standard. Each skill is a folder containing a `SKILL.md` file (YAML frontmatter + instructions).
 
-**Available skills (24):**
+**Available skills (26):**
 
 Knowledge base management:
-- `search` — Literature search (keyword / semantic / author / hybrid retrieval / top-cited ranking)
+- `search` — Literature search (keyword / semantic / author / hybrid retrieval / top-cited ranking / federated cross-source search)
 - `show` — View paper content (L1-L4 layered)
 - `enrich` — Enrich paper content (TOC / conclusion / abstract / citation count)
 - `ingest` — Ingest papers and documents (PDF / DOCX / XLSX / PPTX / MD) + rebuild indexes
@@ -309,6 +313,7 @@ Knowledge base management:
 - `explore` — Multi-dimensional literature exploration (OpenAlex multi-filter + keyword/semantic/unified search + BERTopic)
 - `graph` — Citation graph queries
 - `citations` — Citation count queries and refresh
+- `insights` — Research behavior analysis: one command outputs all four sections in a single run: search hot keywords, most-read papers, reading trends, semantic neighbor recommendations (all in one output, no subcommands)
 - `index` — Rebuild keyword / semantic indexes
 - `workspace` — Workspace management (create / add / search / export)
 - `export` — Multi-format export (BibTeX / RIS / Markdown bibliography / DOCX document)
@@ -324,8 +329,9 @@ Academic writing:
 - `review-response` — Review response (point-by-point analysis + evidence search + rebuttal)
 - `research-gap` — Research gap identification (multi-dimensional analysis + open question discovery)
 
-Visualization:
+Visualization & document generation:
 - `draw` — Drawing (Mermaid structured diagrams + cli-anything-inkscape vector graphics)
+- `document` — Office document generation & inspection (python-docx / python-pptx / openpyxl, direct API calls to build DOCX / PPTX / XLSX + `document inspect` for structure verification)
 
 Translation:
 - `translate` — Paper translation (language detection + LLM chunked translation + batch translation)

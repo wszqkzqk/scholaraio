@@ -52,7 +52,7 @@ skills:
 
   - name: scholaraio/export
     path: .claude/skills/export
-    description: "Export papers from the knowledge base to BibTeX format"
+    description: "Export papers to BibTeX, RIS, Markdown reference lists, or DOCX documents"
 
   - name: scholaraio/import
     path: .claude/skills/import
@@ -101,6 +101,14 @@ skills:
   - name: scholaraio/insights
     path: .claude/skills/insights
     description: "Analyze research behavior: search hot keywords, most-read papers, reading trends, and semantic neighbor recommendations"
+
+  - name: scholaraio/draw
+    path: .claude/skills/draw
+    description: "Generate diagrams (Mermaid flowcharts, sequence, ER, Gantt, mind maps) and vector graphics (cli-anything-inkscape)"
+
+  - name: scholaraio/document
+    path: .claude/skills/document
+    description: "Generate Office documents (DOCX, PPTX, XLSX) via python-docx, python-pptx, and openpyxl APIs"
 
   - name: scholaraio/setup
     path: .claude/skills/setup

@@ -79,12 +79,14 @@ MinerU 解析的 Markdown 保留了高质量公式（LaTeX）和图片附件（`
 | `loader.py` | L1-L4 分层加载 + enrich_toc + enrich_l3 |
 | `explore.py` | 多维文献探索（OpenAlex 多维过滤 + 关键词 + 语义 + 融合检索 + 主题，数据隔离在 `data/explore/`） |
 | `workspace.py` | 工作区论文子集管理（复用搜索/导出） |
+| `document.py` | Office 文档检查（DOCX / PPTX / XLSX 结构/布局/溢出检测） |
 | `export.py` | BibTeX / RIS / Markdown 文献列表 / DOCX 导出 |
 | `citation_styles.py` | 引用格式管理（内置 APA/Vancouver/Chicago/MLA + 动态加载自定义格式，存于 `data/citation_styles/`） |
+| `citation_check.py` | 引用验证（从文本提取 author-year 引用 + 本地库交叉核验） |
 | `audit.py` | 数据质量审计 + 修复 |
-| `sources/` | 数据源适配（local / endnote / zotero） |
+| `sources/` | 数据源适配（local / endnote / zotero / arxiv） |
 | `cli.py` | 全量 CLI 入口 |
-| `mcp_server.py` | MCP 服务端（31 tools） |
+| `mcp_server.py` | MCP 服务端（32 tools） |
 | `setup.py` | 环境检测 + 安装向导 |
 | `metrics.py` | LLM token 用量 + API 计时 |
 | `translate.py` | 论文翻译（语言检测 + LLM 分块翻译 + 批量翻译） |
@@ -241,6 +243,8 @@ pending.json 中 `issue` 字段标识原因：
 注：thesis 自动入库（来自 thesis inbox 或 LLM 判定），不经过 pending。
 patent 自动入库（来自 patent inbox），按公开号去重，不经过 pending。
 
+**注意**：`audit` 命令报告的 `missing_md`（缺少 paper.md）是 `data/papers/` 中已入库论文的质量问题，与 `data/pending/` 的状态无关。pending 只包含入库流程中被拦截的论文（缺 DOI 或重复）；`missing_md` 表示已入库但未经 MinerU 解析，无法进行全文检索。
+
 ### data/explore/ 目录
 
 ```
@@ -307,10 +311,10 @@ translate:
 
 Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agentskills.io) 开放标准。每个 skill 是一个文件夹，包含 `SKILL.md`（YAML frontmatter + 指令）。根目录 `skills/` 为指向 `.claude/skills/` 的符号链接，供 Claude Code 插件系统发现。
 
-**现有 skills（24 个）：**
+**现有 skills（26 个）：**
 
 知识库管理：
-- `search` — 文献搜索（关键词 / 语义 / 作者 / 融合检索 / 高引排行）
+- `search` — 文献搜索（关键词 / 语义 / 作者 / 融合检索 / 高引排行 / 联邦跨库搜索）
 - `show` — 查看论文内容（L1-L4 分层）
 - `enrich` — 富化论文内容（TOC / 结论 / 摘要 / 引用量）
 - `ingest` — 入库论文与文档（PDF / DOCX / XLSX / PPTX / MD）+ 索引重建
@@ -318,6 +322,7 @@ Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agents
 - `explore` — 多维文献探索（OpenAlex 多维过滤 + 关键词/语义/融合检索 + BERTopic）
 - `graph` — 引用图谱查询
 - `citations` — 引用量查询和补查
+- `insights` — 研究行为分析，一个命令一键输出：搜索热词、高频阅读、阅读趋势、语义近邻推荐（均为同一输出的不同分区，无子命令）
 - `index` — 重建关键词 / 语义索引
 - `workspace` — 工作区管理（创建 / 添加 / 搜索 / 导出）
 - `export` — 多格式导出（BibTeX / RIS / Markdown 文献列表 / DOCX 文档）
@@ -334,8 +339,9 @@ Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agents
 - `review-response` — 审稿回复（逐条分析 + 证据检索 + rebuttal 撰写）
 - `research-gap` — 研究空白识别（多维度分析 + 开放问题发现）
 
-可视化：
+可视化与文档生成：
 - `draw` — 绘图（Mermaid 结构化图表 + cli-anything-inkscape 矢量图形）
+- `document` — Office 文档生成与检查（python-docx / python-pptx / openpyxl，直接调用 API 构建 DOCX / PPTX / XLSX + `document inspect` 结构检查）
 
 系统运维：
 - `setup` — 环境检测与安装向导

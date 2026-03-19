@@ -70,6 +70,11 @@ class TestExportBibtex:
         assert "Turbulence" in result
         assert "Deep learning" not in result
 
+    def test_filter_by_paper_type(self, tmp_papers):
+        result = export_bibtex(tmp_papers, paper_type="THES")
+        assert "Deep learning" in result
+        assert "Turbulence" not in result
+
     def test_filter_by_paper_ids(self, tmp_papers):
         result = export_bibtex(tmp_papers, paper_ids=["Smith-2023-Turbulence"])
         assert "Turbulence" in result

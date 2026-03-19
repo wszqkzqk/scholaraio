@@ -1,7 +1,7 @@
 ---
 name: citation-check
-description: Verify citations in AI-generated or human-written text against the local knowledge base and external APIs. Catches hallucinated references, wrong metadata, and missing papers. Use when the user wants to check if citations are real and accurate.
-version: 1.0.0
+description: Verify citations in AI-generated or human-written text against the local knowledge base. Catches hallucinated references, wrong metadata, and missing papers. Use when the user wants to check if citations are real and accurate.
+version: 1.1.0
 author: ZimoLiao/scholaraio
 license: MIT
 tags: ["academic", "citations", "verification", "hallucination"]
@@ -12,55 +12,58 @@ tags: ["academic", "citations", "verification", "hallucination"]
 
 **重要背景**：AI 生成的学术文本中约 40% 的引用可能是幻觉（编造的论文、张冠李戴、元数据拼凑）。即使是人类写的文本也常有年份/期刊名错误。本 skill 的目标是在投稿前消灭所有引用问题。
 
+## CLI 命令（首选方法）
+
+```bash
+# 检查文件中的引用
+scholaraio citation-check <file>
+
+# 在工作区范围内验证
+scholaraio citation-check <file> --ws <workspace-name>
+
+# 从 stdin 读取
+cat draft.md | scholaraio citation-check
+```
+
+CLI 自动提取 author-year 格式的引用（`Author (Year)`、`(Author, Year)`、`Author & Author (Year)`、`Author et al. (Year)` 等），在本地知识库中搜索匹配，输出每条引用的验证状态：
+
+| 状态 | 含义 |
+|------|------|
+| **VERIFIED** | 本地库有唯一匹配，作者+年份一致 |
+| **AMBIGUOUS** | 本地库有多条匹配，需人工确认 |
+| **NOT_IN_LIBRARY** | 本地库中无此论文 |
+
+对于 AMBIGUOUS 和 NOT_IN_LIBRARY 的结果，可进一步执行手动深度验证（见下文）。
+
 ## 前提
 
 用户提供待检查的文本（粘贴、文件路径、或指定 workspace 中的草稿文件）。
 如有 workspace，优先在工作区范围内验证。
 
-## 执行逻辑
+## 手动深度验证
 
-### 1. 提取引用
+CLI 完成初步筛查后，对问题引用执行更细致的检查：
 
-从文本中提取所有引用，识别格式：
-- `(Author, Year)` / `Author (Year)` — 括号引用
-- `\cite{key}` / `\citep{key}` / `\citet{key}` — LaTeX 引用
-- `[N]` — 编号引用（需配合参考文献列表）
+### Layer 1 — 本地库匹配
 
-### 2. 逐条验证
-
-对每条引用执行三层检查：
-
-**Layer 1 — 本地库匹配**
 ```bash
 scholaraio search-author "<Author>" --top 5
 scholaraio usearch "<关键词 from title>" --top 5
 ```
 在本地库中找到匹配论文后，核对：作者名、年份、标题、期刊是否一致。
 
-**Layer 2 — DOI/元数据核验**
+### Layer 2 — DOI/元数据核验
+
 如果本地库有匹配，读取 meta.json 中的 DOI 和详细元数据交叉比对。
 如果本地库无匹配，提醒用户——该引用不在工作区/知识库中。
 
-**Layer 3 — 内容一致性**
+### Layer 3 — 内容一致性
+
 对于关键引用（支撑核心论点的），加载 L2-L3 检查：
 ```bash
-scholaraio show <dir_name> --layer 3
+scholaraio show <paper-id> --layer 3
 ```
 验证：文本中对该论文的描述是否与论文实际内容一致？是否存在过度解读或断章取义？
-
-### 3. 输出报告
-
-生成验证报告，每条引用标注状态：
-
-| 状态 | 含义 |
-|------|------|
-| **VERIFIED** | 本地库有匹配，元数据一致 |
-| **METADATA MISMATCH** | 找到论文但作者/年份/标题有出入 |
-| **NOT IN LIBRARY** | 本地库中无此论文 |
-| **CONTENT MISMATCH** | 论文内容与文中描述不符 |
-| **SUSPICIOUS** | 无法验证，可能为幻觉引用 |
-
-对每条问题引用给出具体修复建议。
 
 ## 常见问题模式
 
@@ -72,7 +75,7 @@ scholaraio show <dir_name> --layer 3
 ## 示例
 
 用户说："帮我检查这段文字里的引用是否正确"
-→ 提取引用，逐条在本地库中搜索验证，输出报告
+→ 先运行 `scholaraio citation-check <file>`，再对问题引用逐条深入验证
 
 用户说："检查 workspace/my-paper/introduction.md 里的引用"
-→ 读取文件，提取引用，在工作区范围内验证
+→ 运行 `scholaraio citation-check workspace/my-paper/introduction.md --ws my-paper`

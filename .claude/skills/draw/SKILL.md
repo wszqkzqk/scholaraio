@@ -1,6 +1,10 @@
 ---
 name: draw
 description: Generate diagrams and vector graphics. Supports Mermaid (flowcharts, sequence diagrams, ER diagrams, Gantt charts, mind maps) via mermaid-py, and custom vector graphics (shapes, text, gradients, layers) via cli-anything-inkscape. Outputs PNG/SVG/PDF to workspace/. Use when the user wants to visualize workflows, architecture, data relationships, research timelines, concept maps, or create polished figures for papers.
+version: 1.0.0
+author: ZimoLiao/scholaraio
+license: MIT
+tags: ["academic", "diagram", "vector-graphics", "visualization"]
 ---
 
 # 绘图工具
@@ -31,58 +35,71 @@ description: Generate diagrams and vector graphics. Supports Mermaid (flowcharts
 
 ### 使用方式
 
-**方式 A：Python 生成 SVG（推荐，零依赖）**
+**方式 C：直接嵌入 Markdown（零依赖，首选）**
 
-```python
-# 安装：pip install mermaid-py
-from mermaid import Mermaid
-from mermaid.graph import Graph
-
-graph = Graph(
-    'flowchart',
-    """
-    flowchart LR
-        A[数据采集] --> B[预处理]
-        B --> C{质量检查}
-        C -->|通过| D[模型训练]
-        C -->|失败| B
-        D --> E[评估]
-    """
-)
-diagram = Mermaid(graph)
-diagram.to_svg('workspace/pipeline.svg')
-diagram.to_png('workspace/pipeline.png')
-```
-
-**方式 B：调用 mermaid.ink 在线渲染（最简单）**
-
-```python
-from mermaid import Mermaid
-from mermaid.graph import Graph
-
-mermaid_code = """
-sequenceDiagram
-    User->>Claude: 提交问题
-    Claude->>DB: 语义检索
-    DB-->>Claude: 返回相关论文
-    Claude-->>User: 综合答复
-"""
-# mermaid-py 自动调用 mermaid.ink 渲染
-graph = Graph('sequence', mermaid_code)
-Mermaid(graph).to_png('workspace/diagram.png')
-```
-
-**方式 C：直接生成 Mermaid 代码嵌入 Markdown**
-
-无需渲染库，直接在 Markdown 中写：
-```markdown
+无需任何渲染工具，直接在 Markdown 中写：
+````markdown
 ```mermaid
 flowchart TD
     A --> B
     B --> C
 ```
+````
+Claude Code 的预览会自动渲染。输出到 `.md` 文件时也可直接查看（GitHub/Obsidian 等均支持）。
+
+**方式 D：mmdc 本地渲染为 PNG/SVG（需本地安装）**
+
+```bash
+# 安装（两步，缺一不可）：
+npm install -g @mermaid-js/mermaid-cli
+# 安装后还需安装 Chrome headless shell（在 mmdc 所在的 node_modules 目录下执行）：
+cd $(npm root -g)/@mermaid-js/mermaid-cli
+npx puppeteer browsers install chrome-headless-shell
+
+# 生成图片
+mmdc -i diagram.mmd -o workspace/figures/diagram.png
+mmdc -i diagram.mmd -o workspace/figures/diagram.svg
 ```
-Claude Code 的预览会自动渲染。
+
+通过 Python 调用 mmdc：
+```python
+import subprocess, tempfile
+from pathlib import Path
+
+mermaid_code = """
+flowchart LR
+    A[数据采集] --> B[预处理]
+    B --> C{质量检查}
+    C -->|通过| D[模型训练]
+    C -->|失败| B
+"""
+
+with tempfile.NamedTemporaryFile(suffix=".mmd", mode="w", delete=False) as f:
+    f.write(mermaid_code)
+    mmd_path = f.name
+
+out_path = "workspace/figures/pipeline.png"
+Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+result = subprocess.run(["mmdc", "-i", mmd_path, "-o", out_path], capture_output=True, text=True)
+if result.returncode != 0:
+    print(result.stderr)
+```
+
+**方式 A/B：mermaid-py（需联网，仅有网络时可用）**
+
+```bash
+pip install mermaid-py
+```
+
+```python
+from mermaid import Mermaid
+from mermaid.graph import Graph
+
+# 注意：mermaid-py 所有渲染方式（to_svg/to_png）均需通过 mermaid.ink 在线 API
+# WSL2/代理环境下可能失败；无网络时请改用方式 C 或方式 D
+graph = Graph('flowchart', "flowchart LR\n    A --> B\n    B --> C")
+Mermaid(graph).to_png('workspace/diagram.png')
+```
 
 ### 常用图表模板
 
@@ -222,9 +239,14 @@ print(f"已生成: {SVG} ({SVG.stat().st_size} bytes)")
 
 1. **判断图表类型**：结构化/逻辑图 → Mermaid；精美配图/示意图 → cli-anything-inkscape
 
-2. **生成代码**：根据用户描述生成 Mermaid 代码或完整 Python 脚本
+2. **选择 Mermaid 渲染方式**：
+   - 默认：方式 C（嵌入 Markdown，零依赖，Claude Code 预览自动渲染）
+   - 需要独立图片文件：方式 D（mmdc，需预先安装，两步安装见上）
+   - 有网络且已安装 mermaid-py：方式 A/B（调用 mermaid.ink 在线 API）
 
-3. **输出到 workspace/**：
+3. **生成代码**：根据用户描述生成 Mermaid 代码或完整 Python 脚本
+
+4. **输出到 workspace/**：
    ```
    workspace/
    └── figures/
@@ -233,7 +255,7 @@ print(f"已生成: {SVG} ({SVG.stat().st_size} bytes)")
        └── experiment_setup.svg
    ```
 
-4. **提示用户**：告知输出路径和嵌入方式（`![图名](workspace/figures/diagram.png)`）
+5. **提示用户**：告知输出路径和嵌入方式（`![图名](workspace/figures/diagram.png)`）
 
 ## 示例
 
@@ -247,4 +269,4 @@ print(f"已生成: {SVG} ({SVG.stat().st_size} bytes)")
 → 生成 Mermaid gantt 图，包含关键论文/方法里程碑
 
 用户说："把这个 Mermaid 代码渲染成图片"
-→ 用 mermaid-py 渲染，保存到 workspace/
+→ 优先用 mmdc（方式 D）本地渲染为 PNG/SVG；mmdc 未安装则输出 Markdown 嵌入（方式 C）
