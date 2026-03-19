@@ -16,6 +16,8 @@ build/
 # Tests cache & IDE
 .pytest_cache/
 .vscode/
+.coverage
+.coverage.*
 
 # SQLite temp files
 *.db-journal
@@ -28,6 +30,10 @@ config.local.yaml
 
 # Developer docs (not published)
 docs-dev/
+docs/issues.md
+
+# Local agent worktrees
+.claude/worktrees/
 
 # Backups
 *.bak
