@@ -152,6 +152,9 @@ class TestValidateWorkspaceName:
 
     def test_rejects_empty_or_path_like_name(self):
         assert not validate_workspace_name("")
+        assert not validate_workspace_name("   ")
+        assert not validate_workspace_name(".")
         assert not validate_workspace_name("../foo")
         assert not validate_workspace_name("foo/bar")
         assert not validate_workspace_name("foo\\bar")
+        assert not validate_workspace_name(" ws ")

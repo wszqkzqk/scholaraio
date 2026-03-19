@@ -220,6 +220,8 @@ def inspect_docx(path: Path) -> str:
     try:
         from docx import Document
         from docx.oxml.ns import qn
+        from docx.table import Table
+        from docx.text.paragraph import Paragraph
     except ImportError:
         raise ImportError("python-docx 未安装，请运行: pip install python-docx")
 
@@ -245,19 +247,11 @@ def inspect_docx(path: Path) -> str:
     lines.append("")
     lines.append("--- 文档结构 ---")
 
-    # Walk document body in order
+    # Walk document body in order (block-level) to avoid paragraph/table desync.
     body = doc.element.body
-    para_idx = 0
-    table_idx = 0
-
-    for child in body:
-        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
-
-        if tag == "p":
-            if para_idx >= len(doc.paragraphs):
-                continue
-            para = doc.paragraphs[para_idx]
-            para_idx += 1
+    for child in body.iterchildren():
+        if child.tag == qn("w:p"):
+            para = Paragraph(child, doc)
 
             style_name = para.style.name if para.style else "Normal"
             styles_used.add(style_name)
@@ -304,11 +298,8 @@ def inspect_docx(path: Path) -> str:
                 # Empty paragraph (spacer)
                 para_count += 1
 
-        elif tag == "tbl":
-            if table_idx >= len(doc.tables):
-                continue
-            table = doc.tables[table_idx]
-            table_idx += 1
+        elif child.tag == qn("w:tbl"):
+            table = Table(child, doc)
             table_count += 1
 
             nr = len(table.rows)
@@ -325,7 +316,7 @@ def inspect_docx(path: Path) -> str:
                 lines.append(f"    表头: {hdr_str}")
                 lines.append(f"    ({nr - 1} 数据行)")
 
-        elif tag == "sectPr":
+        elif child.tag == qn("w:sectPr"):
             pass  # section properties, already handled
 
     # Summary

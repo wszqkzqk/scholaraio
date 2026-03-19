@@ -189,8 +189,9 @@ def list_workspaces(ws_root: Path) -> list[str]:
 def validate_workspace_name(name: str) -> bool:
     """Return True if *name* is a safe workspace identifier.
 
-    Rejects empty names, absolute paths, path separators, and ``..``
-    components to prevent path traversal outside ``workspace/``.
+    Rejects empty names, ``.``/``..`` names, leading/trailing whitespace,
+    absolute paths, path separators, and ``..`` components to prevent path
+    traversal outside ``workspace/``.
 
     Args:
         name: Candidate workspace name from user input.
@@ -200,13 +201,21 @@ def validate_workspace_name(name: str) -> bool:
     """
     if not name:
         return False
+    normalized = name.strip()
+    if not normalized:
+        return False
+    # Reject names with leading/trailing whitespace to avoid ambiguity.
+    if normalized != name:
+        return False
+    if normalized in {".", ".."}:
+        return False
     import os
 
-    if os.path.isabs(name):
+    if os.path.isabs(normalized):
         return False
-    if "/" in name or "\\" in name:
+    if "/" in normalized or "\\" in normalized:
         return False
-    return ".." not in name
+    return ".." not in normalized
 
 
 def show(ws_dir: Path, db_path: Path) -> list[dict]:

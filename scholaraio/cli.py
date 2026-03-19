@@ -2620,14 +2620,21 @@ def cmd_citation_check(args: argparse.Namespace, cfg) -> None:
         paper_ids=paper_ids,
     )
 
-    # Count by status
+    # Count by status (internal codes)
     counts = {"VERIFIED": 0, "NOT_IN_LIBRARY": 0, "AMBIGUOUS": 0}
     for r in results:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
 
+    status_labels = {
+        "VERIFIED": "已验证",
+        "NOT_IN_LIBRARY": "库中未找到",
+        "AMBIGUOUS": "候选不唯一",
+    }
+
     for r in results:
         status_icon = {"VERIFIED": "✓", "NOT_IN_LIBRARY": "✗", "AMBIGUOUS": "?"}.get(r["status"], " ")
-        ui(f"  [{status_icon}] {r['status']:16s}  {r['raw']}  ({r['author']}, {r['year']})")
+        status_text = status_labels.get(r["status"], r["status"])
+        ui(f"  [{status_icon}] {status_text:8s}  {r['raw']}  ({r['author']}, {r['year']})")
         if r["matches"]:
             for m in r["matches"][:3]:
                 display_id = m.get("dir_name") or m.get("paper_id", "?")
@@ -2636,9 +2643,9 @@ def cmd_citation_check(args: argparse.Namespace, cfg) -> None:
 
     ui()
     ui(
-        f"验证结果：{counts['VERIFIED']} VERIFIED / "
-        f"{counts['AMBIGUOUS']} AMBIGUOUS / "
-        f"{counts['NOT_IN_LIBRARY']} NOT_IN_LIBRARY"
+        f"验证结果：已验证 {counts['VERIFIED']} / "
+        f"候选不唯一 {counts['AMBIGUOUS']} / "
+        f"库中未找到 {counts['NOT_IN_LIBRARY']}"
     )
 
 
