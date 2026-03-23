@@ -70,7 +70,9 @@ claude
 
 如果你想在任意项目里启用 ScholarAIO，Claude Code 插件是最干净的路径：
 
-```bash
+请在 Claude Code 会话中输入以下斜杠命令，不要在系统终端里运行：
+
+```text
 /plugin marketplace add ZimoLiao/scholaraio
 /plugin install scholaraio@scholaraio-marketplace
 ```

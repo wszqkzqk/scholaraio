@@ -70,7 +70,9 @@ You can also use the CLI directly with `scholaraio search "your topic"` or start
 
 ScholarAIO ships as a Claude Code plugin, so this is the cleanest cross-project install path:
 
-```bash
+Run these commands inside a Claude Code session, not in your system shell:
+
+```text
 /plugin marketplace add ZimoLiao/scholaraio
 /plugin install scholaraio@scholaraio-marketplace
 ```

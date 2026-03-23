@@ -46,7 +46,9 @@ Claude Code has the cleanest cross-project install path because ScholarAIO ships
 
 ### Install into any project
 
-```bash
+Run these commands inside Claude Code as slash-commands, not in your system shell:
+
+```text
 /plugin marketplace add ZimoLiao/scholaraio
 /plugin install scholaraio@scholaraio-marketplace
 ```
