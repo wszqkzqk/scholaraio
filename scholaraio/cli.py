@@ -170,13 +170,14 @@ def cmd_index(args: argparse.Namespace, cfg) -> None:
     db_path = cfg.index_db
 
     if not papers_dir.exists():
-        _log.error("papers_dir does not exist: %s", papers_dir)
+        _log.error("论文目录不存在: %s", papers_dir)
         sys.exit(1)
 
-    action = "Rebuilding" if args.rebuild else "Building"
-    ui(f"{action} index: {papers_dir} -> {db_path}")
+    action = "重建索引" if args.rebuild else "构建索引"
+    ui(f"{action}: {papers_dir} -> {db_path}")
     count = build_index(papers_dir, db_path, rebuild=args.rebuild)
-    ui(f"Done, indexed {count} papers.")
+    ui(f"完成：已索引 {count} 篇论文。")
+    ui("下一步：运行 `scholaraio search <关键词>` 或 `scholaraio usearch <关键词>` 开始检索。")
 
 
 def cmd_search_author(args: argparse.Namespace, cfg) -> None:
@@ -197,12 +198,13 @@ def cmd_search_author(args: argparse.Namespace, cfg) -> None:
         sys.exit(1)
 
     if not results:
-        ui(f'No papers found for author "{query}".')
+        ui(f'未找到作者 "{query}" 的相关论文。')
         return
 
-    ui(f'Found {len(results)} papers (author: "{query}"):\n')
+    ui(f'按作者检索到 {len(results)} 篇论文（"{query}"）:\n')
     for i, r in enumerate(results, start=1):
         _print_search_result(i, r)
+    _print_search_next_steps()
 
 
 def cmd_search(args: argparse.Namespace, cfg) -> None:
@@ -231,14 +233,13 @@ def cmd_search(args: argparse.Namespace, cfg) -> None:
     _record_search_metrics(store, "search", query, results, elapsed, args)
 
     if not results:
-        ui(f'No results for "{query}".')
+        ui(f'未找到与 "{query}" 相关的结果。')
         return
 
-    ui(f'Found {len(results)} papers (query: "{query}"):\n')
+    ui(f'关键词检索到 {len(results)} 篇论文（"{query}"）:\n')
     for i, r in enumerate(results, start=1):
         _print_search_result(i, r)
-
-    _log.debug("Use: scholaraio show <paper-id> --layer 2/3/4")
+    _print_search_next_steps()
 
 
 def cmd_show(args: argparse.Namespace, cfg) -> None:
@@ -275,7 +276,7 @@ def cmd_show(args: argparse.Namespace, cfg) -> None:
 
     if args.layer == 2:
         abstract = load_l2(json_path)
-        ui("\n--- Abstract ---\n")
+        ui("\n--- 摘要 ---\n")
         ui(abstract)
         _record_read()
         return
@@ -283,16 +284,16 @@ def cmd_show(args: argparse.Namespace, cfg) -> None:
     if args.layer == 3:
         conclusion = load_l3(json_path)
         if conclusion is None:
-            _log.error("L3 not extracted yet. Run: scholaraio enrich-l3 %s", args.paper_id)
+            _log.error("尚未提取结论。请先运行：scholaraio enrich-l3 %s", args.paper_id)
             sys.exit(1)
-        ui("\n--- Conclusion ---\n")
+        ui("\n--- 结论 ---\n")
         ui(conclusion)
         _record_read()
         return
 
     if args.layer == 4:
         if not md_path.exists():
-            _log.error("paper.md not found: %s", md_path)
+            _log.error("未找到 paper.md：%s", md_path)
             sys.exit(1)
         lang = getattr(args, "lang", None)
         if lang:
@@ -305,11 +306,11 @@ def cmd_show(args: argparse.Namespace, cfg) -> None:
                 sys.exit(1)
             translated_path = md_path.parent / f"paper_{lang}.md"
             if translated_path.exists():
-                ui(f"\n--- Full Text ({lang}) ---\n")
+                ui(f"\n--- 全文（{lang}） ---\n")
             else:
-                ui(f"\n--- Full Text (原文, paper_{lang}.md 不存在) ---\n")
+                ui(f"\n--- 全文（原文，paper_{lang}.md 不存在） ---\n")
         else:
-            ui("\n--- Full Text ---\n")
+            ui("\n--- 全文 ---\n")
         ui(load_l4(md_path, lang=lang))
         _record_read()
         return
@@ -323,14 +324,15 @@ def cmd_embed(args: argparse.Namespace, cfg) -> None:
 
     papers_dir = cfg.papers_dir
     if not papers_dir.exists():
-        _log.error("papers_dir does not exist: %s", papers_dir)
+        _log.error("论文目录不存在: %s", papers_dir)
         sys.exit(1)
 
-    action = "Rebuilding" if args.rebuild else "Updating"
-    ui(f"{action} vector index: {papers_dir} -> {cfg.index_db}")
+    action = "重建向量索引" if args.rebuild else "更新向量索引"
+    ui(f"{action}: {papers_dir} -> {cfg.index_db}")
     count = build_vectors(papers_dir, cfg.index_db, rebuild=args.rebuild, cfg=cfg)
-    label = "total" if args.rebuild else "new"
-    ui(f"Done, {count} {label} vectors.")
+    label = "总计" if args.rebuild else "新增"
+    ui(f"完成：{label} {count} 条向量。")
+    ui("下一步：运行 `scholaraio vsearch <问题>` 或 `scholaraio usearch <问题>` 试试检索效果。")
 
 
 def cmd_vsearch(args: argparse.Namespace, cfg) -> None:
@@ -364,13 +366,14 @@ def cmd_vsearch(args: argparse.Namespace, cfg) -> None:
     _record_search_metrics(store, "vsearch", query, results, elapsed, args)
 
     if not results:
-        ui(f'No results for "{query}".')
+        ui(f'未找到与 "{query}" 相关的结果。')
         return
 
-    ui(f'Semantic search: "{query}"  top {len(results)}\n')
+    ui(f'语义检索结果（"{query}"，共 {len(results)} 条）\n')
     for i, r in enumerate(results, start=1):
         score = r.get("score", 0.0)
-        _print_search_result(i, r, extra=f"score: {score:.3f}")
+        _print_search_result(i, r, extra=f"分数: {score:.3f}")
+    _print_search_next_steps()
 
 
 def cmd_usearch(args: argparse.Namespace, cfg) -> None:
@@ -395,14 +398,15 @@ def cmd_usearch(args: argparse.Namespace, cfg) -> None:
     _record_search_metrics(store, "usearch", query, results, elapsed, args)
 
     if not results:
-        ui(f'No results for "{query}".')
+        ui(f'未找到与 "{query}" 相关的结果。')
         return
 
-    ui(f'Unified search: "{query}"  {len(results)} results\n')
+    ui(f'融合检索结果（"{query}"，共 {len(results)} 条）\n')
     for i, r in enumerate(results, start=1):
         score = r.get("score", 0.0)
         match = r.get("match", "?")
-        _print_search_result(i, r, extra=f"{match} {score:.3f}")
+        _print_search_result(i, r, extra=f"{_format_match_tag(match)} {score:.3f}")
+    _print_search_next_steps()
 
 
 def cmd_audit(args: argparse.Namespace, cfg) -> None:
@@ -410,10 +414,10 @@ def cmd_audit(args: argparse.Namespace, cfg) -> None:
 
     papers_dir = cfg.papers_dir
     if not papers_dir.exists():
-        _log.error("papers_dir does not exist: %s", papers_dir)
+        _log.error("论文目录不存在: %s", papers_dir)
         sys.exit(1)
 
-    ui(f"Auditing papers: {papers_dir}\n")
+    ui(f"正在审计论文库: {papers_dir}\n")
     issues = audit_papers(papers_dir)
 
     if args.severity:
@@ -442,7 +446,7 @@ def cmd_repair(args: argparse.Namespace, cfg) -> None:
     json_path = paper_d / "meta.json"
 
     if not md_path.exists():
-        _log.error("File not found: %s", md_path)
+        _log.error("文件不存在: %s", md_path)
         sys.exit(1)
 
     # Preserve existing UUID
@@ -466,9 +470,9 @@ def cmd_repair(args: argparse.Namespace, cfg) -> None:
         meta.first_author = args.author
         meta.first_author_lastname = _extract_lastname(args.author)
 
-    ui(f"Repair: {paper_id}")
-    ui(f"  Title:  {meta.title}")
-    ui(f"  Author: {meta.first_author or '?'} | Year: {meta.year or '?'} | DOI: {meta.doi or 'none'}")
+    ui(f"修复论文: {paper_id}")
+    ui(f"  标题: {meta.title}")
+    ui(f"  作者: {meta.first_author or '?'} | 年份: {meta.year or '?'} | DOI: {meta.doi or '无'}")
 
     # API enrichment
     if not args.no_api:
@@ -489,18 +493,18 @@ def cmd_repair(args: argparse.Namespace, cfg) -> None:
         meta.extraction_method = "manual_fix"
         _log.debug("skipping API query (--no-api)")
 
-    ui(f"  Result: {meta.first_author_lastname} ({meta.year}) {meta.title[:60]}")
+    ui(f"  结果: {meta.first_author_lastname} ({meta.year}) {meta.title[:60]}")
     if meta.doi:
         ui(f"  DOI: {meta.doi}")
-    ui(f"  Method: {meta.extraction_method}")
+    ui(f"  方法: {meta.extraction_method}")
 
     if args.dry_run:
-        ui("  [dry-run] no files written")
+        ui("  [dry-run] 未写入任何文件")
         return
 
     # Write new JSON
     write_metadata_json(meta, json_path)
-    ui(f"  Written: {json_path.name}")
+    ui(f"  已写入: {json_path.name}")
 
     new_stem = generate_new_stem(meta)
     rename_files(md_path, json_path, new_stem, dry_run=False)
@@ -519,14 +523,14 @@ def cmd_enrich_toc(args: argparse.Namespace, cfg) -> None:
     elif args.paper_id:
         targets = [papers_dir / args.paper_id / "meta.json"]
     else:
-        _log.error("Please specify <paper-id> or --all")
+        _log.error("请指定 <paper-id> 或 --all")
         sys.exit(1)
 
     ok = fail = skip = 0
     for json_path in targets:
         md_path = json_path.parent / "paper.md"
         if not md_path.exists():
-            _log.error("Skipped (no paper.md): %s", json_path.parent.name)
+            _log.error("已跳过（缺少 paper.md）: %s", json_path.parent.name)
             skip += 1
             continue
 
@@ -544,17 +548,17 @@ def cmd_enrich_toc(args: argparse.Namespace, cfg) -> None:
             fail += 1
 
     if args.all or len(targets) > 1:
-        ui(f"\nDone: {ok} ok | {fail} failed | {skip} skipped")
+        ui(f"\n完成: {ok} 成功 | {fail} 失败 | {skip} 跳过")
 
 
 def cmd_pipeline(args: argparse.Namespace, cfg) -> None:
     from scholaraio.ingest.pipeline import PRESETS, STEPS, run_pipeline
 
     if args.list_steps:
-        ui("Available steps:")
+        ui("可用步骤：")
         for name, sdef in STEPS.items():
             ui(f"  {name:<10} [{sdef.scope:<7}]  {sdef.desc}")
-        ui("\nAvailable presets:")
+        ui("\n可用预设：")
         for name, steps in PRESETS.items():
             ui(f"  {name:<10} = {', '.join(steps)}")
         return
@@ -562,13 +566,13 @@ def cmd_pipeline(args: argparse.Namespace, cfg) -> None:
     # Resolve step list
     if args.preset:
         if args.preset not in PRESETS:
-            _log.error("Unknown preset '%s'. Available: %s", args.preset, ", ".join(PRESETS))
+            _log.error("未知预设 '%s'。可用预设: %s", args.preset, ", ".join(PRESETS))
             sys.exit(1)
         step_names = PRESETS[args.preset]
     elif args.steps:
         step_names = [s.strip() for s in args.steps.split(",") if s.strip()]
     else:
-        _log.error("Please specify a preset name or --steps")
+        _log.error("请指定一个预设名称或使用 --steps")
         sys.exit(1)
 
     opts = {
@@ -598,14 +602,14 @@ def cmd_enrich_l3(args: argparse.Namespace, cfg) -> None:
     elif args.paper_id:
         targets = [papers_dir / args.paper_id / "meta.json"]
     else:
-        _log.error("Please specify <paper-id> or --all")
+        _log.error("请指定 <paper-id> 或 --all")
         sys.exit(1)
 
     ok = fail = skip = 0
     for json_path in targets:
         md_path = json_path.parent / "paper.md"
         if not md_path.exists():
-            _log.error("Skipped (no paper.md): %s", json_path.parent.name)
+            _log.error("已跳过（缺少 paper.md）: %s", json_path.parent.name)
             skip += 1
             continue
 
@@ -624,7 +628,7 @@ def cmd_enrich_l3(args: argparse.Namespace, cfg) -> None:
             fail += 1
 
     if args.all or len(targets) > 1:
-        ui(f"\nDone: {ok} ok | {fail} failed | {skip} skipped")
+        ui(f"\n完成: {ok} 成功 | {fail} 失败 | {skip} 跳过")
 
 
 def cmd_top_cited(args: argparse.Namespace, cfg) -> None:
@@ -643,12 +647,13 @@ def cmd_top_cited(args: argparse.Namespace, cfg) -> None:
         sys.exit(1)
 
     if not results:
-        ui("No citation data in index. Run scholaraio refetch --all first.")
+        ui("索引中没有引用数据。请先运行 scholaraio refetch --all。")
         return
 
-    ui(f"Top {len(results)} papers by citations:\n")
+    ui(f"按引用量排序的前 {len(results)} 篇论文：\n")
     for i, r in enumerate(results, start=1):
         _print_search_result(i, r)
+    _print_search_next_steps()
 
 
 def cmd_refs(args: argparse.Namespace, cfg) -> None:
@@ -800,7 +805,7 @@ def cmd_refetch(args: argparse.Namespace, cfg) -> None:
     elif args.paper_id:
         targets = [papers_dir / args.paper_id / "meta.json"]
     else:
-        _log.error("Please specify <paper-id> or --all")
+        _log.error("请指定 <paper-id> 或 --all")
         sys.exit(1)
 
     # Filter: only papers missing citations or bibliographic details (unless --force)
@@ -920,7 +925,7 @@ def cmd_topics(args: argparse.Namespace, cfg) -> None:
 
     if args.build or args.rebuild:
         min_ts = args.min_topic_size if args.min_topic_size is not None else cfg.topics.min_topic_size
-        ui(f"{'Rebuilding' if args.rebuild else 'Building'} topic model...")
+        ui(f"{'重建' if args.rebuild else '构建'}主题模型...")
         model = build_topics(
             cfg.index_db,
             cfg.papers_dir,
@@ -938,7 +943,7 @@ def cmd_topics(args: argparse.Namespace, cfg) -> None:
 
     # Quick reduce (no rebuild)
     if args.reduce is not None:
-        ui(f"Reducing to {args.reduce} topics...")
+        ui(f"正在压缩到 {args.reduce} 个主题...")
         model = reduce_topics_to(model, args.reduce, save_path=model_dir, cfg=cfg)
 
     # Manual merge
@@ -952,7 +957,7 @@ def cmd_topics(args: argparse.Namespace, cfg) -> None:
             if len(ids) >= 2:
                 groups.append(ids)
         if groups:
-            ui(f"Merging {len(groups)} groups: {groups}")
+            ui(f"正在合并 {len(groups)} 组主题: {groups}")
             model = merge_topics_by_ids(model, groups, save_path=model_dir, cfg=cfg)
         else:
             _log.error("--merge 格式错误，示例: --merge 1,6,14+3,5")
@@ -963,23 +968,23 @@ def cmd_topics(args: argparse.Namespace, cfg) -> None:
         top_n = args.top or 0  # 0 = show all
         if tid == -1:
             papers = get_outliers(model)
-            ui(f"Outlier papers: {len(papers)}\n")
+            ui(f"离群论文: {len(papers)}\n")
         else:
             topic_words = model.get_topic(tid)
             if topic_words is False or topic_words is None:
-                _log.error("Topic %d does not exist", tid)
+                _log.error("主题 %d 不存在", tid)
                 sys.exit(1)
             keywords = [w for w, _ in topic_words[:10]]
             papers = get_topic_papers(model, tid)
-            ui(f"Topic {tid}: {', '.join(keywords)}")
-            ui(f"{len(papers)} papers\n")
+            ui(f"主题 {tid}: {', '.join(keywords)}")
+            ui(f"{len(papers)} 篇论文\n")
 
         if top_n:
             papers = papers[:top_n]
         for i, p in enumerate(papers, 1):
             cc = p.get("citation_count", {})
             best = max((v for v in (cc or {}).values() if isinstance(v, (int, float))), default=0)
-            cite_str = f"  [cited: {best}]" if best else ""
+            cite_str = f"  [被引: {best}]" if best else ""
             authors = p.get("authors", "")
             first_author = authors.split(",")[0].strip() if authors else ""
             ui(f"  {i:2d}. [{p.get('year', '?')}] {p.get('title', p['paper_id'])}")
@@ -994,16 +999,16 @@ def cmd_topics(args: argparse.Namespace, cfg) -> None:
     # Default: show overview
     overview = get_topic_overview(model)
     if not overview:
-        ui("No valid topics found. Try reducing topics.min_topic_size or adding more papers.")
+        ui("没有可用主题。可尝试减小 topics.min_topic_size 或增加论文数量。")
         return
 
     outliers = get_outliers(model)
     total = sum(t["count"] for t in overview) + len(outliers)
-    ui(f"Library: {total} papers, {len(overview)} topics, {len(outliers)} outliers\n")
+    ui(f"论文库概览：{total} 篇论文，{len(overview)} 个主题，{len(outliers)} 篇离群论文\n")
 
     for t in overview:
         kw = ", ".join(t["keywords"][:6])
-        ui(f"Topic {t['topic_id']:2d} ({t['count']:3d} papers): {kw}")
+        ui(f"主题 {t['topic_id']:2d}（{t['count']:3d} 篇）: {kw}")
         for p in t["representative_papers"][:3]:
             year = p.get("year", "?")
             title = p.get("title", "")
@@ -1018,18 +1023,18 @@ def cmd_backfill_abstract(args: argparse.Namespace, cfg) -> None:
 
     papers_dir = cfg.papers_dir
     if not papers_dir.exists():
-        _log.error("papers_dir does not exist: %s", papers_dir)
+        _log.error("论文目录不存在: %s", papers_dir)
         sys.exit(1)
 
-    action = "Preview" if args.dry_run else "Backfill"
+    action = "预览补全" if args.dry_run else "补全摘要"
     doi_fetch = getattr(args, "doi_fetch", False)
-    source = "DOI official source" if doi_fetch else "local .md + LLM fallback"
-    ui(f"{action} abstract ({source})...\n")
+    source = "DOI 官方来源" if doi_fetch else "本地 .md + LLM 回退"
+    ui(f"{action}摘要（{source}）...\n")
     stats = backfill_abstracts(papers_dir, dry_run=args.dry_run, doi_fetch=doi_fetch, cfg=cfg)
-    parts = [f"{stats['filled']} filled", f"{stats['skipped']} skipped", f"{stats['failed']} failed"]
+    parts = [f"{stats['filled']} 已补全", f"{stats['skipped']} 跳过", f"{stats['failed']} 失败"]
     if stats.get("updated"):
-        parts.insert(1, f"{stats['updated']} updated from official")
-    ui(f"\nDone: {' | '.join(parts)}")
+        parts.insert(1, f"{stats['updated']} 已更新为官方摘要")
+    ui(f"\n完成: {' | '.join(parts)}")
     if stats["filled"] and not args.dry_run:
         _log.debug("consider rebuilding vector index: scholaraio embed --rebuild")
 
@@ -1073,7 +1078,7 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
             limit=getattr(args, "limit", None),
             cfg=cfg,
         )
-        ui(f"\nFetched {total} papers")
+        ui(f"\n已抓取 {total} 篇论文")
 
     elif action == "embed":
         try:
@@ -1081,7 +1086,7 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
         except ImportError as e:
             _check_import_error(e)
         n = build_explore_vectors(args.name, rebuild=args.rebuild, cfg=cfg)
-        ui(f"Done: {n} new embeddings")
+        ui(f"完成: 新增 {n} 条向量嵌入")
 
     elif action == "topics":
         try:
@@ -1104,27 +1109,23 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
                 nr_topics=nr_topics,
                 cfg=cfg,
             )
-            ui(
-                f"\nClustering done: {info['n_topics']} topics, "
-                f"{info['n_outliers']} outliers, "
-                f"{info['n_papers']} papers"
-            )
+            ui(f"\n聚类完成: {info['n_topics']} 个主题，{info['n_outliers']} 篇离群论文，{info['n_papers']} 篇论文")
 
         try:
             model = load_model(model_dir)
         except FileNotFoundError:
-            ui("No topic model. Run scholaraio explore topics --name <name> --build first.")
+            ui("尚未构建主题模型。请先运行 scholaraio explore topics --name <name> --build。")
             return
 
         if args.topic is not None:
             papers = get_topic_papers(model, args.topic)
             top_n = _resolve_top(args, 20)
             papers = papers[:top_n]
-            ui(f"Topic {args.topic}: {len(papers)} papers\n")
+            ui(f"主题 {args.topic}: {len(papers)} 篇论文\n")
             for i, p in enumerate(papers, 1):
                 cc = p.get("citation_count", {})
                 best = max((v for v in (cc or {}).values() if isinstance(v, (int, float))), default=0)
-                cite_str = f"  [cited: {best}]" if best else ""
+                cite_str = f"  [被引: {best}]" if best else ""
                 authors = p.get("authors", "")
                 first_author = authors.split(",")[0].strip() if authors else ""
                 title = p.get("title", "")
@@ -1136,23 +1137,23 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
 
         overview = get_topic_overview(model)
         if not overview:
-            ui("No valid topics. Run scholaraio explore topics --name <name> --build first.")
+            ui("没有可用主题。请先运行 scholaraio explore topics --name <name> --build。")
             return
         from scholaraio.topics import get_outliers
 
         outliers = get_outliers(model)
         total = sum(t["count"] for t in overview) + len(outliers)
-        ui(f"\n{len(overview)} topics, {total} papers, {len(outliers)} outliers\n")
+        ui(f"\n{len(overview)} 个主题，{total} 篇论文，{len(outliers)} 篇离群论文\n")
         for t in overview:
             kw = ", ".join(t["keywords"][:6])
-            ui(f"Topic {t['topic_id']:2d} ({t['count']:3d} papers): {kw}")
+            ui(f"主题 {t['topic_id']:2d}（{t['count']:3d} 篇）: {kw}")
             for p in t["representative_papers"][:3]:
                 title = p.get("title", "")
                 if len(title) > 65:
                     title = title[:62] + "..."
                 cc = p.get("citation_count", {})
                 best = max((v for v in (cc or {}).values() if isinstance(v, (int, float))), default=0)
-                cite_str = f"  [cited: {best}]" if best else ""
+                cite_str = f"  [被引: {best}]" if best else ""
                 ui(f"    [{p.get('year', '?')}] {title}{cite_str}")
             ui()
 
@@ -1177,15 +1178,15 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
                 _check_import_error(e)
             results = explore_vsearch(args.name, query, top_k=top_k, cfg=cfg)
         if not results:
-            ui("No results found.")
+            ui("未找到结果。")
             return
         for i, r in enumerate(results, 1):
             authors = r.get("authors", [])
             first = authors[0] if authors else ""
             cited = r.get("cited_by_count", 0)
-            cite_str = f"  [cited: {cited}]" if cited else ""
+            cite_str = f"  [被引: {cited}]" if cited else ""
             ui(f"[{i}] [{r.get('year', '?')}] {r.get('title', '')}")
-            ui(f"     {first} | {r.get('doi', '')}  (score: {r['score']:.3f}){cite_str}")
+            ui(f"     {first} | {r.get('doi', '')}  (分数: {r['score']:.3f}){cite_str}")
             ui()
 
     elif action == "viz":
@@ -1198,7 +1199,7 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
         try:
             model = load_model(model_dir)
         except FileNotFoundError:
-            ui("No topic model. Run scholaraio explore topics --name <name> --build first.")
+            ui("尚未构建主题模型。请先运行 scholaraio explore topics --name <name> --build。")
             return
         _write_all_viz(model, model_dir / "viz")
 
@@ -1267,15 +1268,15 @@ def cmd_explore(args: argparse.Namespace, cfg) -> None:
             except (OSError, _json.JSONDecodeError) as e:
                 ui(f"读取 {meta_file} 失败：{e}")
                 return
-            ui(f"Explore library: {args.name}")
+            ui(f"Explore 库: {args.name}")
             for k, v in meta.items():
                 ui(f"  {k}: {v}")
         else:
             n = count_papers(args.name, cfg=cfg)
-            ui(f"Explore library {args.name}: {n} papers")
+            ui(f"Explore 库 {args.name}: {n} 篇论文")
 
     else:
-        _log.error("Unknown action: %s", action)
+        _log.error("未知操作: %s", action)
         sys.exit(1)
 
 
@@ -1290,25 +1291,25 @@ def cmd_rename(args: argparse.Namespace, cfg) -> None:
     elif args.paper_id:
         targets = [papers_dir / args.paper_id / "meta.json"]
     else:
-        _log.error("Please specify <paper-id> or --all")
+        _log.error("请指定 <paper-id> 或 --all")
         sys.exit(1)
 
     renamed = skip = fail = 0
     for json_path in targets:
         if not json_path.exists():
-            _log.error("Paper not found: %s", json_path.parent.name)
+            _log.error("未找到论文: %s", json_path.parent.name)
             fail += 1
             continue
 
         new_path = rename_paper(json_path, dry_run=args.dry_run)
         if new_path:
-            action = "Preview" if args.dry_run else "Rename"
+            action = "预览" if args.dry_run else "重命名"
             ui(f"{action}: {json_path.parent.name} -> {new_path.parent.name}")
             renamed += 1
         else:
             skip += 1
 
-    ui(f"\nDone: {renamed} renamed | {skip} unchanged | {fail} failed")
+    ui(f"\n完成: {renamed} 已重命名 | {skip} 未变化 | {fail} 失败")
     if renamed and not args.dry_run:
         _log.debug("consider rebuilding index: scholaraio index --rebuild")
 
@@ -1329,7 +1330,7 @@ def cmd_export(args: argparse.Namespace, cfg) -> None:
     elif action == "docx":
         _cmd_export_docx(args, cfg)
     else:
-        _log.error("Unknown export action: %s", action)
+        _log.error("未知导出操作: %s", action)
         sys.exit(1)
 
 
@@ -1632,7 +1633,7 @@ def cmd_ws(args: argparse.Namespace, cfg) -> None:
         for name in names:
             ws_dir = ws_root / name
             ids = workspace.read_paper_ids(ws_dir)
-            ui(f"  {name} ({len(ids)} papers)")
+            ui(f"  {name}（{len(ids)} 篇论文）")
 
     elif action == "show":
         ws_dir = ws_root / args.name
@@ -1697,6 +1698,7 @@ def cmd_ws(args: argparse.Namespace, cfg) -> None:
         ui(f"工作区 {args.name} 中找到 {len(results)} 篇:\n")
         for i, r in enumerate(results, 1):
             _print_search_result(i, r, extra=f" [{r.get('match', '')}]")
+        _print_search_next_steps(include_ws_add=False)
 
     elif action == "export":
         ws_dir = ws_root / args.name
@@ -1795,7 +1797,7 @@ def cmd_fsearch(args: argparse.Namespace, cfg) -> None:
             else:
                 for i, r in enumerate(results, 1):
                     score = r.get("score", 0.0)
-                    _print_search_result(i, r, extra=f"{r.get('match', '?')} {score:.3f}")
+                    _print_search_result(i, r, extra=f"{_format_match_tag(r.get('match', '?'))} {score:.3f}")
             ui()
 
         elif scope.startswith("explore:"):
@@ -1840,7 +1842,7 @@ def cmd_fsearch(args: argparse.Namespace, cfg) -> None:
                         first = authors[0] if authors else "?"
                         score = r.get("score", 0.0)
                         ui(f"  [{i}] [{r.get('year', '?')}] {r.get('title', '')}")
-                        ui(f"       {first} | score: {score:.3f}")
+                        ui(f"       {first} | 分数: {score:.3f}")
                         ui()
 
         elif scope == "arxiv":
@@ -1953,7 +1955,7 @@ def cmd_insights(args: argparse.Namespace, cfg) -> None:
                 if w and w not in _STOPWORDS and len(w) > 1:
                     word_counts[w] += 1
 
-    ui("【搜索热词 Top 10】")
+    ui("【搜索热词前 10】")
     if word_counts:
         for word, cnt in word_counts.most_common(10):
             bar = "█" * min(cnt, 20)
@@ -2004,7 +2006,7 @@ def cmd_insights(args: argparse.Namespace, cfg) -> None:
         title_key = pid_to_title.get(name) or name
         title_read_counts[title_key] += cnt
 
-    ui("【最常阅读论文 Top 10】")
+    ui("【最常阅读论文前 10】")
     if title_read_counts:
         for rank, (title_key, cnt) in enumerate(title_read_counts.most_common(10), 1):
             label = title_key[:60]
@@ -2099,7 +2101,7 @@ def cmd_insights(args: argparse.Namespace, cfg) -> None:
                         except Exception:
                             pass
                     label = title[:60] if title else pid
-                    ui(f"  {rank}. {label}  (score: {score:.3f})")
+                    ui(f"  {rank}. {label}  (分数: {score:.3f})")
             else:
                 ui("  未找到合适的邻近论文（可能向量索引未建立）")
         except ImportError:
@@ -2140,17 +2142,17 @@ def cmd_metrics(args: argparse.Namespace, cfg) -> None:
 
     store = get_store()
     if not store:
-        _log.error("Metrics database not initialized.")
+        _log.error("Metrics 数据库尚未初始化。")
         return
 
     if args.summary:
         s = store.summary()
-        ui("LLM call statistics (all sessions):")
-        ui(f"  calls:        {s['call_count']}")
-        ui(f"  prompt tokens:  {s['total_tokens_in']:,}")
-        ui(f"  completion:     {s['total_tokens_out']:,}")
-        ui(f"  total tokens:   {s['total_tokens_in'] + s['total_tokens_out']:,}")
-        ui(f"  total time:     {s['total_duration_s']:.1f}s")
+        ui("LLM 调用统计（全部会话）：")
+        ui(f"  调用次数:      {s['call_count']}")
+        ui(f"  输入 tokens:   {s['total_tokens_in']:,}")
+        ui(f"  输出 tokens:   {s['total_tokens_out']:,}")
+        ui(f"  总 tokens:     {s['total_tokens_in'] + s['total_tokens_out']:,}")
+        ui(f"  总耗时:        {s['total_duration_s']:.1f}s")
         return
 
     rows = store.query(
@@ -2159,7 +2161,7 @@ def cmd_metrics(args: argparse.Namespace, cfg) -> None:
         limit=args.last,
     )
     if not rows:
-        ui("No records.")
+        ui("没有记录。")
         return
 
     # Header
@@ -2535,7 +2537,7 @@ def _print_search_result(idx: int, r: dict, extra: str = "") -> None:
     authors = r.get("authors") or ""
     author_display = authors.split(",")[0].strip() + (" et al." if "," in authors else "")
     cite = r.get("citation_count") or ""
-    cite_suffix = f"  [cited: {cite}]" if cite else ""
+    cite_suffix = f"  [被引: {cite}]" if cite else ""
     extra_suffix = f"  ({extra})" if extra else ""
     # Prefer dir_name for display, fall back to paper_id (UUID)
     display_id = r.get("dir_name") or r["paper_id"]
@@ -2543,6 +2545,21 @@ def _print_search_result(idx: int, r: dict, extra: str = "") -> None:
     ui(f"     {author_display} | {r.get('year', '?')} | {r.get('journal', '?')}{cite_suffix}")
     ui(f"     {r['title']}")
     ui()
+
+
+def _print_search_next_steps(include_ws_add: bool = True) -> None:
+    ui("下一步：可以运行 `scholaraio show <paper-id> --layer 2/3/4` 查看摘要、结论或全文。")
+    if include_ws_add:
+        ui("也可以运行 `scholaraio ws add <工作区名> <paper-id>` 把感兴趣的论文加入工作区。")
+
+
+def _format_match_tag(match: str) -> str:
+    mapping = {
+        "both": "关键词+语义",
+        "fts": "关键词",
+        "vec": "语义",
+    }
+    return mapping.get(match, match)
 
 
 def _format_citations(cc: dict) -> str:
@@ -2592,7 +2609,7 @@ def _resolve_paper(paper_id: str, cfg) -> Path:
             continue
         if data.get("id") == paper_id or data.get("doi") == paper_id:
             return pdir
-    _log.error("Paper not found: %s", paper_id)
+    _log.error("未找到论文: %s", paper_id)
     sys.exit(1)
 
 
@@ -2601,20 +2618,20 @@ def _print_header(l1: dict) -> None:
     author_str = ", ".join(authors[:3])
     if len(authors) > 3:
         author_str += f" et al. ({len(authors)} total)"
-    ui(f"paper_id : {l1['paper_id']}")
-    ui(f"title    : {l1['title']}")
-    ui(f"authors  : {author_str}")
-    ui(f"year     : {l1.get('year') or '?'}  |  journal: {l1.get('journal') or '?'}")
+    ui(f"论文ID   : {l1['paper_id']}")
+    ui(f"标题     : {l1['title']}")
+    ui(f"作者     : {author_str}")
+    ui(f"年份     : {l1.get('year') or '?'}  |  期刊: {l1.get('journal') or '?'}")
     if l1.get("doi"):
-        ui(f"doi      : {l1['doi']}")
+        ui(f"DOI      : {l1['doi']}")
     ids = l1.get("ids") or {}
     if ids.get("patent_publication_number"):
-        ui(f"pub_num  : {ids['patent_publication_number']}")
+        ui(f"公开号   : {ids['patent_publication_number']}")
     if l1.get("paper_type"):
-        ui(f"type     : {l1['paper_type']}")
+        ui(f"类型     : {l1['paper_type']}")
     cite_str = _format_citations(l1.get("citation_count") or {})
     if cite_str:
-        ui(f"cited    : {cite_str}")
+        ui(f"引用     : {cite_str}")
     if ids.get("semantic_scholar_url"):
         ui(f"S2       : {ids['semantic_scholar_url']}")
     if ids.get("openalex_url"):

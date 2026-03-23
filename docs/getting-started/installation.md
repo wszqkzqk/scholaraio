@@ -43,6 +43,18 @@ Or check what's already configured:
 scholaraio setup check
 ```
 
+## Agent Setup
+
+If you want to know which path to use for Claude Code, Codex, OpenClaw, Cursor, or MCP clients, see:
+
+- [Agent Setup](agent-setup.md)
+
+That guide separates:
+
+- opening this repository directly
+- registering ScholarAIO for use from another project
+- choosing between native skills, plugins, and MCP
+
 ## Embedding Model
 
 The embedding model (Qwen3-Embedding-0.6B, ~1.2 GB) downloads automatically on first use. For users outside China, set `embed.source: huggingface` in `config.yaml`.

@@ -1,8 +1,8 @@
 # ScholarAIO
 
-**Scholar All-In-One** — a local academic literature explorer powered by AI.
+**Scholar All-In-One** — an AI-native research terminal for coding agents.
 
-ScholarAIO is a research terminal built around Claude Code. You interact with your literature knowledge base through natural language — searching, reading, analyzing, and writing — all from the command line.
+ScholarAIO is a research terminal built around AI coding agents. You interact with your literature knowledge base through natural language — searching, reading, analyzing, and writing — all from the command line.
 
 ## Features
 
@@ -13,8 +13,8 @@ ScholarAIO is a research terminal built around Claude Code. You interact with yo
 - **BibTeX Export**: Filtered export with standard citation formats
 - **Literature Exploration**: Multi-dimensional OpenAlex queries with isolated data
 - **Workspace Management**: Organize papers into subsets for focused work
-- **22 Agent Skills**: Literature review, paper writing, gap analysis, and more
-- **MCP Server**: 31 tools for integration with Claude Desktop, Cursor, etc.
+- **26 Agent Skills**: Literature review, paper writing, gap analysis, and more
+- **MCP Server**: 32 tools for integration with Claude Desktop, Cursor, etc.
 
 ## Quick Start
 
@@ -24,6 +24,7 @@ scholaraio setup
 ```
 
 See [Installation](getting-started/installation.md) for detailed instructions.
+See [Agent Setup](getting-started/agent-setup.md) for repo-open vs plugin vs MCP setup paths.
 
 ## Three Usage Modes
 

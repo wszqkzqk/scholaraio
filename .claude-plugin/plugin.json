@@ -1,6 +1,6 @@
 {
   "name": "scholaraio",
-  "description": "Academic research terminal for Claude Code — search, read, and analyze papers from your local knowledge base while coding. 22 skills: literature search (keyword/semantic/fusion), paper reading (L1-L4), ingestion pipeline, topic modeling, citation graphs, workspace management, BibTeX export, academic writing assistance, and more. Requires Python 3.10+ and pip install.",
+  "description": "Academic research terminal for Claude Code — search, read, and analyze papers from your local knowledge base while coding. 26 skills: literature search (keyword/semantic/fusion), paper reading (L1-L4), ingestion pipeline, topic modeling, citation graphs, workspace management, BibTeX export, academic writing assistance, and more. Requires Python 3.10+ and pip install.",
   "version": "1.0.0",
   "author": {
     "name": "ZimoLiao",

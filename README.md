@@ -25,22 +25,97 @@ Your coding agent already reads code, writes code, and runs experiments. Scholar
   <img src="docs/assets/demo.gif" width="700" alt="ScholarAIO Demo">
 </div> -->
 
-## Quick Start
+## Start Here
+
+| If you want to... | Do this |
+|-------------------|---------|
+| Try ScholarAIO itself or contribute to the repo | Open this repository directly with your agent |
+| Use ScholarAIO in Claude Code across many projects | Install the Claude Code plugin |
+| Reuse ScholarAIO skills in Codex / OpenClaw | Register the skills through `~/.agents/skills/` |
+| Use ScholarAIO from Cursor, Claude Desktop, or another MCP client | Run the MCP server |
+
+Detailed setup guide: [`docs/getting-started/agent-setup.md`](docs/getting-started/agent-setup.md)
+
+## Use Inside This Repository
+
+This is the best path when you want the full ScholarAIO experience: bundled agent instructions, local skills, CLI, MCP server, and the complete codebase context.
 
 ```bash
-# 1. Install
-git clone https://github.com/ZimoLiao/scholaraio.git && cd scholaraio
+# 1. Clone and install
+git clone https://github.com/ZimoLiao/scholaraio.git
+cd scholaraio
 pip install -e ".[full]"
 
-# 2. Configure
-cp config.local.example.yaml config.local.yaml
-# Add your API keys (both optional — see Configuration below)
+# 2. Configure your local environment
+scholaraio setup
 
-# 3. Go
-claude    # Launch Claude Code in the project directory — that's it
+# 3. Start your agent in the repo root
+claude
 ```
 
-> Or use the CLI directly: `scholaraio search "your topic"` | MCP server: `scholaraio-mcp`
+When you open the repo directly:
+
+- Claude Code reads `CLAUDE.md` and `.claude/skills/`
+- Codex / OpenClaw read `AGENTS.md` and `.agents/skills/`
+- Cline reads `.clinerules`
+- Cursor reads `.cursorrules`
+- Windsurf reads `.windsurfrules`
+- GitHub Copilot reads `.github/copilot-instructions.md`
+
+You can also use the CLI directly with `scholaraio search "your topic"` or start the MCP server with `scholaraio-mcp`.
+
+## Register ScholarAIO in Another Project
+
+### Claude Code plugin
+
+ScholarAIO ships as a Claude Code plugin, so this is the cleanest cross-project install path:
+
+Run these commands inside a Claude Code session, not in your system shell:
+
+```text
+/plugin marketplace add ZimoLiao/scholaraio
+/plugin install scholaraio@scholaraio-marketplace
+```
+
+After that, start a new Claude Code session in any project and use namespaced skills such as `/scholaraio:search` or `/scholaraio:show`.
+
+### Codex / OpenClaw skills
+
+If you want ScholarAIO available to Codex-style agents outside this repo, clone it once and symlink the skills into the global discovery directory:
+
+```bash
+git clone https://github.com/ZimoLiao/scholaraio.git ~/.codex/scholaraio
+cd ~/.codex/scholaraio
+pip install -e ".[full]"
+scholaraio setup
+mkdir -p ~/.agents/skills
+ln -s ~/.codex/scholaraio/.claude/skills ~/.agents/skills/scholaraio
+```
+
+Then make config discovery explicit for cross-project use:
+
+```bash
+# Option A: keep ScholarAIO data rooted in the cloned repo
+export SCHOLARAIO_CONFIG="$HOME/.codex/scholaraio/config.yaml"
+
+# Option B: move/copy config to the global fallback location
+mkdir -p ~/.scholaraio
+cp ~/.codex/scholaraio/config.yaml ~/.scholaraio/config.yaml
+```
+
+Without one of those two options, running `scholaraio` from another project may fall back to defaults rooted in that current project and create `data/` plus `workspace/` there. Restart the agent after creating the symlink. This registers the ScholarAIO skill library globally. For the full bundled project instructions, opening this repository directly is still the better path.
+
+### MCP server
+
+For Cursor, Claude Desktop, and other MCP-compatible clients, the stable integration path is the MCP server:
+
+```bash
+# install the optional MCP dependencies first if you did not use .[full]
+pip install -e ".[mcp]"
+scholaraio-mcp
+```
+
+See the full setup matrix in [`docs/getting-started/agent-setup.md`](docs/getting-started/agent-setup.md).
 
 ## What It Does
 
@@ -75,26 +150,18 @@ The knowledge base is the foundation; what your agent builds on top of it is ope
 
 ## Works With Your Agent
 
-ScholarAIO is designed to be **agent-agnostic**. It currently ships with configuration for multiple agents and IDEs:
+ScholarAIO is designed to be **agent-agnostic**, but not every agent exposes the same installation surface. Some work best by opening this repository directly; others are better through plugins or MCP.
 
-| Agent / IDE | Integration | Config file |
-|-------------|-------------|-------------|
-| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | Full skills + instructions | `CLAUDE.md` + `.claude/skills/` |
-| [Cursor](https://cursor.sh) | Instructions wrapper | `.cursorrules` |
-| [Windsurf](https://codeium.com/windsurf) | Instructions wrapper | `.windsurfrules` |
-| [Cline](https://github.com/cline/cline) | Instructions + skills | `.clinerules` + `.claude/skills/` |
-| [GitHub Copilot](https://github.com/features/copilot) | Instructions wrapper | `.github/copilot-instructions.md` |
-| [Codex](https://openai.com/codex) / OpenClaw | Full instructions + skills | `AGENTS.md` + `.agents/skills/` |
+| Agent / IDE | Open this repo directly | Reuse from another project |
+|-------------|-------------------------|-----------------------------|
+| [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | `CLAUDE.md` + `.claude/skills/` | Claude plugin marketplace |
+| [Codex](https://openai.com/codex) / OpenClaw | `AGENTS.md` + `.agents/skills/` | Symlink skills into `~/.agents/skills/` |
+| [Cline](https://github.com/cline/cline) | `.clinerules` + `.claude/skills/` | Prefer MCP outside this repo |
+| [Cursor](https://cursor.sh) | `.cursorrules` | Prefer MCP outside this repo |
+| [Windsurf](https://codeium.com/windsurf) | `.windsurfrules` | Prefer MCP outside this repo |
+| [GitHub Copilot](https://github.com/features/copilot) | `.github/copilot-instructions.md` | Prefer MCP outside this repo |
 
-The **MCP server** (`scholaraio-mcp`, 32 tools) works with any MCP-compatible client. Skills follow the open [AgentSkills.io](https://agentskills.io) standard — `.agents/skills/` is a symlink to `.claude/skills/` for cross-agent discovery.
-
-**Use without cloning** — install as a Claude Code plugin into any project:
-
-```bash
-/plugin marketplace add ZimoLiao/scholaraio
-/plugin install scholaraio@scholaraio-marketplace
-# Skills available as /scholaraio:search, /scholaraio:show, etc.
-```
+The **MCP server** (`scholaraio-mcp`, 32 tools) works with any MCP-compatible client. Skills follow the open [AgentSkills.io](https://agentskills.io) standard, and `.agents/skills/` is a symlink to `.claude/skills/` for cross-agent discovery.
 
 **Migrating from existing tools?** Import directly from Endnote (XML/RIS) and Zotero (Web API or local SQLite) — your PDFs, metadata, and references come along. More import sources are on the roadmap.
 

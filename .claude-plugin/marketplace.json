@@ -12,7 +12,7 @@
     {
       "name": "scholaraio",
       "source": "./",
-      "description": "Full ScholarAIO skill suite (22 skills): literature search (keyword/semantic/fusion), paper reading (L1-L4), ingestion, topic modeling, citation graphs, workspace management, BibTeX export, academic writing, and more. Requires Python 3.10+; auto-installs on first session.",
+      "description": "Full ScholarAIO skill suite (26 skills): literature search (keyword/semantic/fusion), paper reading (L1-L4), ingestion, topic modeling, citation graphs, workspace management, BibTeX export, academic writing, and more. Requires Python 3.10+; auto-installs on first session.",
       "version": "1.0.0",
       "author": {
         "name": "ZimoLiao",
