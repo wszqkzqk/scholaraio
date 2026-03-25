@@ -267,8 +267,8 @@ def _clean_title_for_filename(title: str) -> str:
         return "Untitled"
     # Decode HTML/XML entities (&#x007B; → {, &amp; → &, etc.)
     title = html.unescape(title)
-    # Remove MathML / XML tags
-    title = re.sub(r"<[^>]+>", "", title)
+    # Remove MathML / XML tags (only actual tags, not arbitrary <...> content)
+    title = re.sub(r"</?[A-Za-z][A-Za-z0-9:-]*(?:\s[^<>]*)?>", "", title)
     # Remove LaTeX inline math: $...$
     title = re.sub(r"\$[^$]+\$", "", title)
     # Remove LaTeX commands with nested braces: \mathrm{{\rm BH}_8}
@@ -306,10 +306,13 @@ def _sanitize_for_filename(text: str, max_bytes: int = 255) -> str:
     # Strip leading/trailing hyphens
     text = text.strip("-")
     # Truncate to max_bytes (respect multi-byte chars, cut at word boundary)
-    if len(text.encode("utf-8")) > max_bytes:
-        while len(text.encode("utf-8")) > max_bytes:
-            text = text.rsplit("-", 1)[0] if "-" in text else text[:-1]
-        text = text.strip("-")
+    encoded = text.encode("utf-8")
+    if len(encoded) > max_bytes:
+        # Trim by bytes, then decode ignoring incomplete multibyte tail
+        text = encoded[:max_bytes].decode("utf-8", errors="ignore")
+        # Cut back to last word boundary if possible
+        if "-" in text:
+            text = text.rsplit("-", 1)[0].strip("-")
     return text
 
 
