@@ -776,6 +776,76 @@ def cmd_shared_refs(args: argparse.Namespace, cfg) -> None:
         ui()
 
 
+def cmd_toolref(args: argparse.Namespace, cfg) -> None:
+    from scholaraio.toolref import (
+        TOOL_REGISTRY,
+        toolref_fetch,
+        toolref_list,
+        toolref_search,
+        toolref_show,
+        toolref_use,
+    )
+
+    action = args.toolref_action
+
+    if action == "fetch":
+        count = toolref_fetch(args.tool, version=args.version, cfg=cfg)
+        if count == 0:
+            ui("未索引任何页面。请检查版本号。")
+
+    elif action == "show":
+        results = toolref_show(args.tool, *args.path, cfg=cfg)
+        if not results:
+            ui(f"未找到匹配：{args.tool} {' '.join(args.path)}")
+            ui(f"尝试搜索：scholaraio toolref search {args.tool} {' '.join(args.path)}")
+            return
+        for r in results:
+            ui(f"\n{'=' * 60}")
+            ui(f"📖 {r['page_name']}")
+            if r.get("section"):
+                ui(f"   Namelist: {r['section']}  |  Program: {r.get('program', '')}")
+            if r.get("synopsis"):
+                ui(f"   {r['synopsis']}")
+            ui(f"{'─' * 60}")
+            ui(r.get("content", "(无内容)"))
+
+    elif action == "search":
+        query = " ".join(args.query)
+        results = toolref_search(
+            args.tool,
+            query,
+            top_k=args.top,
+            program=args.program,
+            section=args.section,
+            cfg=cfg,
+        )
+        if not results:
+            ui(f"无结果：{query}")
+            return
+        ui(f"找到 {len(results)} 条结果：\n")
+        for i, r in enumerate(results, 1):
+            synopsis = r.get("synopsis", "")[:80]
+            ui(f"  {i:2d}. [{r['page_name']}] {synopsis}")
+
+    elif action == "list":
+        entries = toolref_list(args.tool, cfg=cfg)
+        if not entries:
+            tools = ", ".join(TOOL_REGISTRY.keys())
+            ui(f"无已拉取文档。支持的工具：{tools}")
+            ui("使用 `scholaraio toolref fetch <tool> --version <ver>` 拉取")
+            return
+        current_tool = ""
+        for e in entries:
+            if e["tool"] != current_tool:
+                current_tool = e["tool"]
+                ui(f"\n{e['display_name']}:")
+            marker = " (current)" if e["is_current"] else ""
+            ui(f"  {e['version']}{marker} — {e['page_count']} 页")
+
+    elif action == "use":
+        toolref_use(args.tool, args.version, cfg=cfg)
+
+
 def cmd_translate(args: argparse.Namespace, cfg) -> None:
     from scholaraio.translate import batch_translate, translate_paper
 
@@ -3147,6 +3217,33 @@ def main() -> None:
     p_l3.add_argument("--force", action="store_true", help="强制重新提取（覆盖已有结果）")
     p_l3.add_argument("--inspect", action="store_true", help="展示提取过程详情")
     p_l3.add_argument("--max-retries", type=int, default=2, help="最大重试次数（默认 2）")
+
+    # --- toolref ---
+    p_tr = sub.add_parser("toolref", help="科学计算工具文档查阅（fetch/show/search/list/use）")
+    p_tr.set_defaults(func=cmd_toolref)
+    p_tr_sub = p_tr.add_subparsers(dest="toolref_action", required=True)
+
+    p_trf = p_tr_sub.add_parser("fetch", help="拉取工具文档（git clone → 提取 → 索引）")
+    p_trf.add_argument("tool", help="工具名（qe/lammps/gromacs）")
+    p_trf.add_argument("--version", default=None, help="版本号（如 7.5, stable_22Jul2025_update3）")
+
+    p_trs = p_tr_sub.add_parser("show", help="查看指定命令/参数的文档")
+    p_trs.add_argument("tool", help="工具名")
+    p_trs.add_argument("path", nargs="+", help="查找路径（如 pw ecutwfc）")
+
+    p_trq = p_tr_sub.add_parser("search", help="全文搜索工具文档")
+    p_trq.add_argument("tool", help="工具名")
+    p_trq.add_argument("query", nargs="+", help="搜索关键词")
+    p_trq.add_argument("--top", type=int, default=20, help="返回条数（默认 20）")
+    p_trq.add_argument("--program", default=None, help="按程序过滤（如 pw.x）")
+    p_trq.add_argument("--section", default=None, help="按 namelist/section 过滤（如 SYSTEM）")
+
+    p_trl = p_tr_sub.add_parser("list", help="列出已有工具文档及版本")
+    p_trl.add_argument("tool", nargs="?", default=None, help="工具名（省略列出全部）")
+
+    p_tru = p_tr_sub.add_parser("use", help="切换工具文档的当前活跃版本")
+    p_tru.add_argument("tool", help="工具名")
+    p_tru.add_argument("version", help="目标版本号")
 
     # --- translate ---
     p_trans = sub.add_parser("translate", help="翻译论文 Markdown 到目标语言")
