@@ -51,3 +51,41 @@ def test_load_model_sets_hf_endpoint_before_sentence_transformers_import(tmp_pat
     assert seen["hf_endpoint_at_import"] == "https://hf-mirror.example"
     assert model.model_name == "test-model"
     assert model.device == "cpu"
+
+
+def test_load_model_overrides_modelscope_cache_from_cfg(tmp_path, monkeypatch):
+    monkeypatch.setenv("MODELSCOPE_CACHE", "/preexisting-cache")
+    cfg = _build_config(
+        {
+            "embed": {
+                "source": "modelscope",
+                "cache_dir": str(tmp_path / "cfg-cache"),
+                "device": "cpu",
+                "model": "test-model",
+            }
+        },
+        tmp_path,
+    )
+
+    class FakeSentenceTransformer:
+        def __init__(self, model_name: str, device: str):
+            self.model_name = model_name
+            self.device = device
+
+    monkeypatch.setattr(
+        vectors.importlib,
+        "import_module",
+        lambda name: SimpleNamespace(SentenceTransformer=FakeSentenceTransformer),
+    )
+    monkeypatch.setattr(vectors, "_resolve_model_path", lambda *args: None)
+    vectors._model_cache.clear()
+
+    prev_modelscope_cache = os.environ.get("MODELSCOPE_CACHE")
+    try:
+        vectors._load_model(cfg)
+        assert os.environ.get("MODELSCOPE_CACHE") == str(tmp_path / "cfg-cache")
+    finally:
+        if prev_modelscope_cache is None:
+            monkeypatch.delenv("MODELSCOPE_CACHE", raising=False)
+        else:
+            monkeypatch.setenv("MODELSCOPE_CACHE", prev_modelscope_cache)

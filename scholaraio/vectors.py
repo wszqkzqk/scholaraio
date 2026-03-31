@@ -83,7 +83,7 @@ def _load_model(cfg: Config | None = None):
         hf_endpoint = os.environ.get("SCHOLARAIO_HF_ENDPOINT") or os.environ.get("HF_ENDPOINT") or ""
 
     if source == "modelscope":
-        os.environ.setdefault("MODELSCOPE_CACHE", cache_dir)
+        os.environ["MODELSCOPE_CACHE"] = cache_dir
     if hf_endpoint:
         os.environ["HF_ENDPOINT"] = hf_endpoint
 
