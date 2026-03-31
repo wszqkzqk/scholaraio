@@ -45,6 +45,16 @@ _log = logging.getLogger(__name__)
 
 _DEFAULT_TOOLREF_DIR = Path("data/toolref")
 _MANIFEST_REQUEST_TIMEOUT = (10, 20)
+_OPENFOAM_DISCOVERY_TIMEOUT = (5, 10)
+_OPENFOAM_MAX_DISCOVERY_PAGES = 800
+_OPENFOAM_DISCOVERY_SEEDS = ("fundamentals/", "tools/")
+_BIO_DISCOVERY_TIMEOUT = (5, 15)
+_BIO_DISCOVERED_PAGE_ALIASES = {
+    "iqtree/ultrafast-bootstrap": {
+        "source_page": "iqtree/ultrafast-bootstrap-parameters",
+        "anchor": "ultrafast-bootstrap-parameters",
+    },
+}
 
 # ============================================================================
 #  Tool registry — maps tool name to repo/doc-path/format metadata
@@ -171,6 +181,7 @@ def _score_search_result(
     synopsis = (row["synopsis"] or "").lower()
     content = (row["content"] or "").lower()
     section = (row["section"] or "").lower()
+    program = (row["program"] or "").lower()
     rank = float(row["rank"]) if row["rank"] is not None else 0.0
 
     score = 0
@@ -212,6 +223,24 @@ def _score_search_result(
 
     if tool == "gromacs" and section == "mdp":
         score += 20
+        if normalized_query == "pressure coupling":
+            if page_name.endswith("/pcoupl"):
+                score += 90
+            if page_name.endswith("/pcoupltype"):
+                score += 40
+        if normalized_query == "temperature coupling" and page_name.endswith("/tcoupl"):
+            score += 90
+    if tool == "bioinformatics":
+        if ("multiple sequence alignment" in normalized_query or normalized_query.startswith("msa")) and program == "mafft":
+            score += 140
+        if ("bam indexing" in normalized_query or "samtools index" in normalized_query or "index bam" in normalized_query) and page_name.endswith("/index"):
+            score += 140
+        if ("read mapping" in normalized_query or "nanopore" in normalized_query or "long read" in normalized_query) and program == "minimap2":
+            score += 120
+        if ("variant calling" in normalized_query or "vcf" in normalized_query) and program == "bcftools":
+            score += 110
+        if ("phylogenetic tree" in normalized_query or "ultrafast bootstrap" in normalized_query) and program == "iqtree":
+            score += 120
 
     return score, rank
 
@@ -230,7 +259,7 @@ def _has_local_docs(tool: str, version: str, cfg: Config | None = None) -> bool:
         if not page_count:
             return False
         if info.get("source_type") == "manifest":
-            expected = len(_build_manifest(tool, version))
+            expected = _expected_manifest_pages(tool, version, cfg)
             return page_count >= expected
         return True
     return False
@@ -245,6 +274,38 @@ def _manifest_page_count(vdir: Path) -> int:
         if html_path.with_suffix(".json").exists():
             count += 1
     return count
+
+
+def _manifest_snapshot_path(vdir: Path) -> Path:
+    return vdir / "manifest.json"
+
+
+def _load_manifest_snapshot(vdir: Path) -> list[dict] | None:
+    path = _manifest_snapshot_path(vdir)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(payload, list):
+        return None
+    return [item for item in payload if isinstance(item, dict)]
+
+
+def _write_manifest_snapshot(vdir: Path, manifest: list[dict]) -> None:
+    _manifest_snapshot_path(vdir).write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def _expected_manifest_pages(tool: str, version: str, cfg: Config | None = None) -> int:
+    vdir = _version_dir(tool, version, cfg)
+    snapshot = _load_manifest_snapshot(vdir)
+    if snapshot:
+        return len(snapshot)
+    return len(_build_manifest(tool, version))
 
 
 def _manifest_present_page_names(vdir: Path) -> set[str]:
@@ -290,6 +351,27 @@ def _copy_manifest_page_from_cache(src_vdir: Path, dst_vdir: Path, page_name: st
     return False
 
 
+def _load_manifest_cached_html(vdir: Path, page_name: str) -> str | None:
+    pages_dir = vdir / "pages"
+    if not pages_dir.exists():
+        return None
+    for meta_path in pages_dir.glob("*.json"):
+        html_path = meta_path.with_suffix(".html")
+        if not html_path.exists():
+            continue
+        try:
+            payload = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if payload.get("page_name") != page_name:
+            continue
+        try:
+            return html_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return None
+    return None
+
+
 def _normalize_search_query(query: str) -> str:
     normalized = re.sub(r"[-_/]+", " ", query).strip()
     normalized = re.sub(r"\s+", " ", normalized)
@@ -313,6 +395,12 @@ def _expand_search_query(tool: str, query: str) -> str:
             expansions.extend(["wallshearstress", "wall shear", "shear stress"])
         if "solver residuals" in normalized or normalized == "residuals":
             expansions.extend(["residuals", "linear solver", "convergence"])
+        if "k omega sst" in normalized or "k-omega sst" in normalized or "sst turbulence" in normalized:
+            expansions.extend(["komegasst", "turbulence model", "ras model", "sst"])
+        if "numerical schemes" in normalized:
+            expansions.extend(["fvschemes", "discretisation schemes", "fv schemes"])
+        if "linear solver settings" in normalized or "solver settings" in normalized:
+            expansions.extend(["fvsolution", "linear solver", "solver controls"])
     elif tool == "lammps":
         if "phase transition pressure" in normalized or "shock pressure" in normalized:
             expansions.extend(["fix_nphug", "fix_msst", "fix_qbmsst", "shock"])
@@ -330,6 +418,10 @@ def _expand_search_query(tool: str, query: str) -> str:
             expansions.extend(["tcoupl", "nose hoover", "temperature coupling", "tau t"])
         if "constraints h bonds" in normalized or "constraints h-bonds" in normalized:
             expansions.extend(["constraints", "h bonds", "constraint algorithm"])
+        if normalized == "temperature coupling" or "temperature coupling" in normalized:
+            expansions.extend(["tcoupl", "tau t", "ref t"])
+        if normalized == "pressure coupling" or "pressure coupling" in normalized:
+            expansions.extend(["pcoupl", "pcoupltype", "tau p", "ref p"])
     elif tool == "bioinformatics":
         if "phylogenetic tree" in normalized:
             expansions.extend(["iqtree", "mafft", "phylogenetics"])
@@ -337,6 +429,10 @@ def _expand_search_query(tool: str, query: str) -> str:
             expansions.extend(["iqtree", "ultrafast bootstrap", "ufboot", "phylogenetics"])
         if "read mapping" in normalized or "long read" in normalized or "nanopore" in normalized:
             expansions.extend(["minimap2", "alignment", "long reads", "ont"])
+        if "multiple sequence alignment" in normalized or "msa" in normalized:
+            expansions.extend(["mafft", "alignment", "fasta"])
+        if "bam indexing" in normalized or "index bam" in normalized:
+            expansions.extend(["samtools index", "samtools", "bam index"])
         if "mutation" in normalized:
             expansions.extend(["bcftools", "samtools", "variant calling"])
         if "variant calling" in normalized or "vcf" in normalized:
@@ -469,6 +565,161 @@ def _build_openfoam_manifest(version: str) -> list[dict]:
     ]
 
 
+_OPENFOAM_CORE_PAGE_MAP: dict[str, tuple[str, str, str, str]] = {
+    "tools/processing/solvers/rtm/incompressible/simpleFoam/": ("openfoam/simpleFoam", "simpleFoam", "simpleFoam", "solver"),
+    "tools/processing/solvers/rtm/incompressible/pimpleFoam/": ("openfoam/pimpleFoam", "pimpleFoam", "pimpleFoam", "solver"),
+    "tools/processing/solvers/rtm/compressible/rhoSimpleFoam/": ("openfoam/rhoSimpleFoam", "rhoSimpleFoam", "rhoSimpleFoam", "solver"),
+    "tools/pre-processing/mesh/generation/blockMesh/blockmesh/": ("openfoam/blockMesh", "blockMesh", "blockMesh", "mesh"),
+    "tools/pre-processing/mesh/generation/snappyhexmesh/": ("openfoam/snappyHexMesh", "snappyHexMesh", "snappyHexMesh", "mesh"),
+    "fundamentals/case-structure/controldict/": ("openfoam/controlDict", "controlDict", "controlDict", "dictionary"),
+    "fundamentals/case-structure/fvschemes/": ("openfoam/fvSchemes", "fvSchemes", "fvSchemes", "dictionary"),
+    "fundamentals/case-structure/fvsolution/": ("openfoam/fvSolution", "fvSolution", "fvSolution", "dictionary"),
+    "tools/processing/models/turbulence/ras/linear-evm/rtm/kOmegaSST/": ("openfoam/kOmegaSST", "kOmegaSST", "kOmegaSST", "model"),
+    "tools/post-processing/function-objects/": ("openfoam/functionObjects", "functionObjects", "function objects", "post-processing"),
+    "tools/post-processing/function-objects/forces/": ("openfoam/forces", "forces", "forces", "post-processing"),
+    "tools/post-processing/function-objects/forces/forceCoeffs/": ("openfoam/forceCoeffs", "forceCoeffs", "forceCoeffs", "post-processing"),
+    "tools/post-processing/function-objects/field/Q/": ("openfoam/Q", "Q", "Q", "post-processing"),
+    "tools/post-processing/function-objects/field/yPlus/": ("openfoam/yPlus", "yPlus", "yPlus", "post-processing"),
+    "tools/post-processing/function-objects/field/wallShearStress/": ("openfoam/wallShearStress", "wallShearStress", "wallShearStress", "post-processing"),
+    "tools/processing/numerics/solvers/residuals/": ("openfoam/residuals", "residuals", "Residuals", "solver-control"),
+}
+
+
+def _normalize_openfoam_doc_url(url: str, version: str, *, base_url: str = "https://doc.openfoam.com") -> str | None:
+    if not url:
+        return None
+    if url.startswith("//"):
+        url = "https:" + url
+    elif url.startswith("/"):
+        url = base_url.rstrip("/") + url
+    elif not re.match(r"^https?://", url):
+        url = base_url.rstrip("/") + "/" + url.lstrip("./")
+
+    if not url.startswith(base_url.rstrip("/") + "/"):
+        return None
+
+    url = url.split("#", 1)[0].split("?", 1)[0]
+    if not url.endswith("/"):
+        url += "/"
+
+    path = url.removeprefix(base_url.rstrip("/")).lstrip("/")
+    if not path.startswith(f"{version}/"):
+        return None
+    rel = path[len(version) + 1 :]
+    if not rel or any(rel.endswith(ext) for ext in (".css/", ".js/", ".png/", ".jpg/", ".svg/", ".pdf/", ".txt/")):
+        return None
+    return base_url.rstrip("/") + "/" + path
+
+
+def _is_openfoam_doc_path_allowed(rel_path: str) -> bool:
+    if not rel_path:
+        return False
+    return any(rel_path.startswith(prefix) for prefix in _OPENFOAM_DISCOVERY_SEEDS)
+
+
+def _extract_openfoam_doc_links(html: str, version: str, *, base_url: str = "https://doc.openfoam.com") -> list[str]:
+    links: list[str] = []
+    for match in re.finditer(r"""href=["']([^"'#?]+(?:/)?(?:#[^"']*)?)["']""", html, re.IGNORECASE):
+        normalized = _normalize_openfoam_doc_url(match.group(1), version, base_url=base_url)
+        if not normalized:
+            continue
+        rel = normalized.removeprefix(base_url.rstrip("/") + f"/{version}/")
+        if not _is_openfoam_doc_path_allowed(rel):
+            continue
+        if normalized not in links:
+            links.append(normalized)
+    return links
+
+
+def _classify_openfoam_section(rel_path: str) -> str:
+    if rel_path.startswith("fundamentals/case-structure/"):
+        return "dictionary"
+    if rel_path.startswith("fundamentals/"):
+        return "fundamentals"
+    if rel_path.startswith("tools/pre-processing/mesh/"):
+        return "mesh"
+    if rel_path.startswith("tools/processing/solvers/"):
+        return "solver"
+    if rel_path.startswith("tools/processing/models/"):
+        return "model"
+    if rel_path.startswith("tools/processing/numerics/"):
+        return "solver-control"
+    if rel_path.startswith("tools/post-processing/"):
+        return "post-processing"
+    if rel_path.startswith("tools/"):
+        return "tool"
+    return "general"
+
+
+def _discover_openfoam_manifest_bundle(version: str, session: requests.Session) -> tuple[list[dict], dict[str, str]]:
+    base_url = "https://doc.openfoam.com"
+    queue = [base_url.rstrip("/") + f"/{version}/{seed}" for seed in _OPENFOAM_DISCOVERY_SEEDS]
+    seen: set[str] = set()
+    discovered: set[str] = set()
+    prefetched_html: dict[str, str] = {}
+
+    while queue and len(seen) < _OPENFOAM_MAX_DISCOVERY_PAGES:
+        url = queue.pop(0)
+        if url in seen:
+            continue
+        seen.add(url)
+        try:
+            resp = session.get(url, timeout=_OPENFOAM_DISCOVERY_TIMEOUT)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            _log.debug("OpenFOAM discovery skip %s: %s", url, e)
+            continue
+        prefetched_html[url] = resp.text
+
+        rel = url.removeprefix(base_url.rstrip("/") + f"/{version}/")
+        if _is_openfoam_doc_path_allowed(rel):
+            discovered.add(url)
+
+        for child in _extract_openfoam_doc_links(resp.text, version, base_url=base_url):
+            if child not in seen and child not in queue:
+                queue.append(child)
+
+    if not discovered:
+        return [], {}
+
+    rel_paths = sorted(url.removeprefix(base_url.rstrip("/") + f"/{version}/") for url in discovered)
+    slug_counts: dict[str, int] = {}
+    for rel_path in rel_paths:
+        slug = Path(rel_path.rstrip("/")).name
+        slug_counts[slug] = slug_counts.get(slug, 0) + 1
+
+    manifest: list[dict] = []
+    for rel_path in rel_paths:
+        mapped = _OPENFOAM_CORE_PAGE_MAP.get(rel_path)
+        url = base_url.rstrip("/") + f"/{version}/{rel_path}"
+        if mapped:
+            page_name, program, title, section = mapped
+        else:
+            slug = Path(rel_path.rstrip("/")).name
+            program = slug
+            title = slug
+            section = _classify_openfoam_section(rel_path)
+            if slug_counts.get(slug, 0) == 1 and slug not in {"overview", "index"}:
+                page_name = f"openfoam/{slug}"
+            else:
+                page_name = "openfoam/" + rel_path.rstrip("/").replace("/", "__")
+        manifest.append(
+            {
+                "program": program,
+                "section": section,
+                "page_name": page_name,
+                "title": title,
+                "url": url,
+            }
+        )
+    return manifest, prefetched_html
+
+
+def _discover_openfoam_manifest(version: str, session: requests.Session) -> list[dict]:
+    manifest, _ = _discover_openfoam_manifest_bundle(version, session)
+    return manifest
+
+
 def _build_bioinformatics_manifest(_version: str) -> list[dict]:
     return [
         {
@@ -510,6 +761,13 @@ def _build_bioinformatics_manifest(_version: str) -> list[dict]:
             "url": "https://www.htslib.org/doc/samtools-view.html",
         },
         {
+            "program": "samtools",
+            "section": "alignment",
+            "page_name": "samtools/index",
+            "title": "samtools index",
+            "url": "https://www.htslib.org/doc/samtools-index.html",
+        },
+        {
             "program": "bcftools",
             "section": "variant-calling",
             "page_name": "bcftools/manual",
@@ -549,7 +807,8 @@ def _build_bioinformatics_manifest(_version: str) -> list[dict]:
             "section": "phylogenetics",
             "page_name": "iqtree/ultrafast-bootstrap",
             "title": "IQ-TREE ultrafast bootstrap",
-            "url": "https://iqtree.github.io/doc/Command-Reference#ultrafast-bootstrap",
+            "url": "https://iqtree.github.io/doc/Command-Reference#ultrafast-bootstrap-parameters",
+            "anchor": "ultrafast-bootstrap-parameters",
         },
         {
             "program": "esmfold",
@@ -559,6 +818,145 @@ def _build_bioinformatics_manifest(_version: str) -> list[dict]:
             "url": "https://huggingface.co/docs/transformers/model_doc/esm",
         },
     ]
+
+
+def _extract_html_headings_with_ids(html: str, *, min_level: int = 2, max_level: int = 3) -> list[dict]:
+    headings: list[dict] = []
+    pattern = re.compile(
+        r"<h([1-6])\b[^>]*\bid=[\"']([^\"']+)[\"'][^>]*>(.*?)</h\1>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in pattern.finditer(html):
+        level = int(match.group(1))
+        if level < min_level or level > max_level:
+            continue
+        title = re.sub(r"<[^>]+>", "", unescape(match.group(3)))
+        title = re.sub(r"\s+", " ", title).strip()
+        if not title:
+            continue
+        headings.append({"level": level, "id": match.group(2), "title": title})
+    return headings
+
+
+def _extract_html_anchor_fragment(html: str, anchor: str) -> str:
+    body = _extract_html_main(html)
+    heading_re = re.compile(
+        r"<h([1-6])\b[^>]*\bid=[\"']([^\"']+)[\"'][^>]*>.*?</h\1>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    matches = list(heading_re.finditer(body))
+    for idx, match in enumerate(matches):
+        if match.group(2) != anchor:
+            continue
+        level = int(match.group(1))
+        end = len(body)
+        for nxt in matches[idx + 1 :]:
+            if int(nxt.group(1)) <= level:
+                end = nxt.start()
+                break
+        return body[match.start() : end]
+    return body
+
+
+def _discover_bioinformatics_manifest(
+    version: str,
+    session: requests.Session,
+    base_manifest: list[dict],
+    *,
+    cache_vdir: Path | None = None,
+) -> tuple[list[dict], dict[str, str]]:
+    del version  # reserved for future versioned discovery rules
+    prefetched_html: dict[str, str] = {}
+    manifest_by_page = {item["page_name"]: dict(item) for item in base_manifest}
+
+    for item in base_manifest:
+        if item["page_name"] not in {"samtools/manual", "bcftools/manual", "iqtree/command-reference"}:
+            continue
+        try:
+            resp = session.get(item["url"], timeout=_BIO_DISCOVERY_TIMEOUT)
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            _log.debug("Bio discovery skip %s: %s", item["url"], e)
+            if cache_vdir is not None:
+                cached = _load_manifest_cached_html(cache_vdir, item["page_name"])
+                if cached:
+                    prefetched_html[item["url"]] = cached
+            continue
+        prefetched_html[item["url"]] = resp.text
+
+    samtools_html = prefetched_html.get("https://www.htslib.org/doc/samtools.html")
+    if samtools_html:
+        seen_links: set[str] = set()
+        for match in re.finditer(r'href=["\'](samtools-[a-z0-9-]+\.html)["\']', samtools_html, re.IGNORECASE):
+            rel = match.group(1)
+            if rel in seen_links:
+                continue
+            seen_links.add(rel)
+            subcmd = rel.removeprefix("samtools-").removesuffix(".html")
+            page_name = f"samtools/{subcmd}"
+            manifest_by_page.setdefault(
+                page_name,
+                {
+                    "program": "samtools",
+                    "section": "alignment",
+                    "page_name": page_name,
+                    "title": f"samtools {subcmd}",
+                    "url": f"https://www.htslib.org/doc/{rel}",
+                },
+            )
+
+    bcftools_html = prefetched_html.get("https://samtools.github.io/bcftools/bcftools.html")
+    if bcftools_html:
+        for heading in _extract_html_headings_with_ids(bcftools_html):
+            hid = heading["id"]
+            if hid.startswith("_"):
+                continue
+            if not (heading["title"].lower().startswith("bcftools ") or hid in {"common_options", "expressions", "terminology"}):
+                continue
+            page_name = f"bcftools/{hid.replace('_', '-')}"
+            item = manifest_by_page.get(page_name, {})
+            item.update(
+                {
+                    "program": "bcftools",
+                    "section": "variant-calling",
+                    "page_name": page_name,
+                    "title": heading["title"],
+                    "url": f"https://samtools.github.io/bcftools/bcftools.html#{hid}",
+                    "anchor": hid,
+                }
+            )
+            manifest_by_page[page_name] = item
+
+    iqtree_html = prefetched_html.get("https://iqtree.github.io/doc/Command-Reference")
+    if iqtree_html:
+        for heading in _extract_html_headings_with_ids(iqtree_html):
+            hid = heading["id"]
+            if hid in {"command-reference", "example-usages"}:
+                continue
+            page_name = f"iqtree/{hid.replace('_', '-').replace(' ', '-')}"
+            item = manifest_by_page.get(page_name, {})
+            item.update(
+                {
+                    "program": "iqtree",
+                    "section": "phylogenetics",
+                    "page_name": page_name,
+                    "title": heading["title"],
+                    "url": f"https://iqtree.github.io/doc/Command-Reference#{hid}",
+                    "anchor": hid,
+                }
+            )
+            manifest_by_page[page_name] = item
+
+    for page_name, alias in _BIO_DISCOVERED_PAGE_ALIASES.items():
+        item = manifest_by_page.get(page_name)
+        source_item = manifest_by_page.get(alias["source_page"])
+        if not item or not source_item:
+            continue
+        item["url"] = source_item["url"]
+        item["anchor"] = alias["anchor"]
+
+    manifest = sorted(manifest_by_page.values(), key=lambda item: (item["program"], item["page_name"]))
+    return manifest, prefetched_html
 
 
 def _build_manifest(tool: str, version: str) -> list[dict]:
@@ -1216,6 +1614,8 @@ def _pick_manifest_synopsis(lines: list[str], title: str) -> str:
 def _parse_manifest_html(filepath: Path) -> list[dict]:
     meta = json.loads(filepath.with_suffix(".json").read_text(encoding="utf-8"))
     raw_html = filepath.read_text(encoding="utf-8", errors="replace")
+    if meta.get("anchor"):
+        raw_html = _extract_html_anchor_fragment(raw_html, meta["anchor"])
     text = _html_to_text(raw_html)
 
     title = meta.get("title", "")
@@ -1365,6 +1765,20 @@ def toolref_fetch(
         session = requests.Session()
         session.headers.update({"User-Agent": "ScholarAIO/1.3 toolref-fetch"})
         manifest = _build_manifest(tool, version)
+        prefetched_manifest_pages: dict[str, str] = {}
+        if tool == "openfoam" and manifest == _build_openfoam_manifest(version):
+            discovered_manifest, prefetched_manifest_pages = _discover_openfoam_manifest_bundle(version, session)
+            if discovered_manifest:
+                manifest = discovered_manifest
+        elif tool == "bioinformatics" and manifest == _build_bioinformatics_manifest(version):
+            discovered_manifest, prefetched_manifest_pages = _discover_bioinformatics_manifest(
+                version,
+                session,
+                manifest,
+                cache_vdir=vdir if vdir.exists() else None,
+            )
+            if discovered_manifest:
+                manifest = discovered_manifest
         ui(f"[toolref] 正在拉取 {info['display_name']} {version} 官方文档页...")
         import tempfile
 
@@ -1375,25 +1789,31 @@ def toolref_fetch(
             dest.mkdir(parents=True, exist_ok=True)
             for idx, item in enumerate(manifest, start=1):
                 urls = [item["url"], *item.get("fallback_urls", [])]
-                resp = None
+                primary_url = item["url"]
+                base_url = primary_url.split("#", 1)[0]
+                body_text: str | None = prefetched_manifest_pages.get(primary_url) or prefetched_manifest_pages.get(base_url)
+                successful_url = primary_url if body_text is not None else None
                 last_error: Exception | None = None
-                for url in urls:
-                    try:
-                        resp = session.get(url, timeout=_MANIFEST_REQUEST_TIMEOUT)
-                        resp.raise_for_status()
-                        break
-                    except requests.RequestException as e:
-                        last_error = e
-                        _log.warning("拉取失败: %s (%s)", url, e)
-                if resp is None:
+                if body_text is None:
+                    for url in urls:
+                        try:
+                            resp = session.get(url, timeout=_MANIFEST_REQUEST_TIMEOUT)
+                            resp.raise_for_status()
+                            body_text = resp.text
+                            successful_url = url
+                            break
+                        except requests.RequestException as e:
+                            last_error = e
+                            _log.warning("拉取失败: %s (%s)", url, e)
+                if body_text is None:
                     failures.append(item["page_name"])
                     continue
                 slug = _slugify(item["page_name"])
                 html_path = dest / f"{idx:03d}-{slug}.html"
-                html_path.write_text(resp.text, encoding="utf-8")
+                html_path.write_text(body_text, encoding="utf-8")
                 stored_item = dict(item)
-                if urls[0] != url:
-                    stored_item["fetched_url"] = url
+                if successful_url and urls[0] != successful_url:
+                    stored_item["fetched_url"] = successful_url
                     if last_error is not None:
                         stored_item["primary_fetch_error"] = str(last_error)
                 html_path.with_suffix(".json").write_text(
@@ -1427,6 +1847,7 @@ def toolref_fetch(
             if restored_failures:
                 meta["last_fetch_failed_page_names"] = failures
                 meta["restored_from_cache_page_names"] = restored_failures
+            _write_manifest_snapshot(staged_vdir, manifest)
             (staged_vdir / "meta.json").write_text(
                 json.dumps(meta, indent=2, ensure_ascii=False),
                 encoding="utf-8",
@@ -1485,7 +1906,7 @@ def toolref_fetch(
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         else:
             fetched_pages = _manifest_page_count(vdir)
-            expected_pages = len(_build_manifest(tool, version))
+            expected_pages = _expected_manifest_pages(tool, version, cfg)
             meta["fetched_pages"] = fetched_pages
             meta["expected_pages"] = expected_pages
             meta["failed_pages"] = expected_pages - fetched_pages

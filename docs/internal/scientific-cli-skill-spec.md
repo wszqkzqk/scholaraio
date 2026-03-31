@@ -150,6 +150,86 @@ Minimum bar:
 - at least three `search` queries with realistic user phrasing
 - at least one recovery case showing graceful fallback when coverage is weak
 
+For toolchain ecosystems, at least one golden query should be task-oriented rather than tool-name-oriented.
+Example shape:
+
+- `read mapping nanopore`
+- `variant calling vcf`
+- `protein structure folding`
+
+That is how end users actually ask.
+
+## Production-Ready Bar
+
+Do not confuse these concepts:
+
+- page-complete
+- parser-complete
+- production-ready
+
+For ScholarAIO, a scientific tool integration is production-ready when:
+
+- the highest-value `show` queries directly hit
+- the highest-value `search` queries usually rank the right page first
+- refreshes do not silently reduce usable coverage
+- the agent can keep serving the user even when some coverage is partial
+
+This means:
+
+- `production-ready` does not require mirroring every upstream page
+- `manifest coverage complete` only means the curated entry set is complete
+- the user experience matters more than theoretical documentation totality
+
+## Manifest Guidance
+
+When using manifest-based docs ingestion:
+
+- prefer a curated set of high-value pages first
+- add `fallback_urls` for flaky but important upstream pages
+- preserve old cache when a forced refresh returns a worse result
+- track fetched/expected/failed/restored counts in metadata
+- if the user later needs broader coverage, evolve from curated manifest to discovery-based manifest instead of endlessly hand-editing page lists
+- persist discovered manifests as local snapshots so later refreshes and completeness checks are deterministic
+- reuse HTML fetched during discovery instead of downloading the same page twice
+- allow discovery to reuse locally cached seed pages when upstream is temporarily unavailable
+- for anchor-derived logical pages, allow refresh to reuse seed-page HTML by base URL, not only the exact fragment URL
+- preserve or upgrade anchor metadata on curated high-value page names when upstream heading ids use a different canonical form
+
+Good candidates for manifest-based onboarding:
+
+- documentation portals with unstable navigation-heavy HTML
+- multi-site toolchains where a small number of official pages matter far more than full-site crawl completeness
+
+## Discovery-Based Expansion
+
+When a tool outgrows a tiny curated manifest, use this upgrade path:
+
+1. Start from official seed pages
+2. Discover child pages or anchor sections automatically
+3. Filter to the product's mainline scope
+4. Snapshot the discovered manifest locally
+5. Fetch/index from that snapshot with cache protection
+
+This pattern is especially useful when:
+
+- a docs portal has a reliable internal navigation structure
+- a single large manual page contains many subcommands or sections
+- the user wants "mainline docs as completely as possible" without dragging in plugins, extensions, or unrelated ecosystem noise
+
+## Scope Discipline
+
+Broader coverage still needs boundaries.
+
+For example:
+
+- OpenFOAM mainline docs can include fundamentals, tools, numerics, models, and post-processing while excluding plugins and secondary extensions
+- Bioinformatics toolchains can include official subcommands and anchor-based sections of core manuals without trying to mirror the entire surrounding ecosystem
+
+The agent should be explicit about this distinction:
+
+- `mainline-complete enough` is a valid target
+- `entire internet around the tool` is not
+
 ## Template
 
 Use this shape when writing a new scientific CLI skill:

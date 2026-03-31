@@ -6,9 +6,15 @@ from scholaraio.toolref import (
     _build_bioinformatics_manifest,
     _build_openfoam_manifest,
     _clean_manifest_text,
+    _discover_bioinformatics_manifest,
+    _discover_openfoam_manifest,
     _expand_search_query,
+    _extract_html_anchor_fragment,
+    _extract_html_headings_with_ids,
+    _extract_openfoam_doc_links,
     _has_local_docs,
     _normalize_search_query,
+    _normalize_openfoam_doc_url,
     _normalize_program_filter,
     _parse_lammps_rst,
     _pick_manifest_synopsis,
@@ -48,6 +54,12 @@ def test_expand_search_query_adds_more_openfoam_aliases():
     assert "wallshearstress" in expanded
     expanded = _expand_search_query("openfoam", "solver residuals")
     assert "residuals" in expanded
+    expanded = _expand_search_query("openfoam", "k omega sst turbulence")
+    assert "komegasst" in expanded
+    expanded = _expand_search_query("openfoam", "numerical schemes")
+    assert "fvschemes" in expanded
+    expanded = _expand_search_query("openfoam", "linear solver settings")
+    assert "fvsolution" in expanded
 
 
 def test_expand_search_query_adds_bioinformatics_aliases():
@@ -57,6 +69,10 @@ def test_expand_search_query_adds_bioinformatics_aliases():
     assert "minimap2" in expanded
     expanded = _expand_search_query("bioinformatics", "protein structure folding")
     assert "esmfold" in expanded
+    expanded = _expand_search_query("bioinformatics", "multiple sequence alignment fasta")
+    assert "mafft" in expanded
+    expanded = _expand_search_query("bioinformatics", "bam indexing")
+    assert "samtools index" in expanded
 
 
 def test_expand_search_query_adds_qe_aliases():
@@ -76,6 +92,66 @@ def test_build_openfoam_manifest_uses_requested_version():
     assert manifest
     assert all("page_name" in item for item in manifest)
     assert any("/2312/" in item["url"] for item in manifest if "doc.openfoam.com" in item["url"])
+
+
+def test_normalize_openfoam_doc_url_filters_version_and_assets():
+    assert _normalize_openfoam_doc_url("/2312/fundamentals/", "2312") == "https://doc.openfoam.com/2312/fundamentals/"
+    assert _normalize_openfoam_doc_url("/2212/fundamentals/", "2312") is None
+    assert _normalize_openfoam_doc_url("/2312/img/logo.png", "2312") is None
+
+
+def test_extract_openfoam_doc_links_keeps_main_doc_paths():
+    html = """
+    <a href="/2312/fundamentals/">Fundamentals</a>
+    <a href="/2312/tools/pre-processing/mesh/generation/blockMesh/blockmesh/">blockMesh</a>
+    <a href="/2312/installation/">Install</a>
+    <a href="/2312/img/openfoam_logo.jpg">Logo</a>
+    """
+    links = _extract_openfoam_doc_links(html, "2312")
+    assert "https://doc.openfoam.com/2312/fundamentals/" in links
+    assert "https://doc.openfoam.com/2312/tools/pre-processing/mesh/generation/blockMesh/blockmesh/" in links
+    assert all("/installation/" not in link for link in links)
+
+
+def test_discover_openfoam_manifest_builds_curated_mainline_pages():
+    class FakeResponse:
+        def __init__(self, text: str):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.pages = {
+                "https://doc.openfoam.com/2312/fundamentals/": """
+                    <a href="/2312/fundamentals/case-structure/controldict/">controlDict</a>
+                    <a href="/2312/fundamentals/case-structure/fvschemes/">fvSchemes</a>
+                    <a href="/2312/installation/">Installation</a>
+                """,
+                "https://doc.openfoam.com/2312/tools/": """
+                    <a href="/2312/tools/processing/solvers/rtm/incompressible/simpleFoam/">simpleFoam</a>
+                    <a href="/2312/tools/post-processing/function-objects/forces/forceCoeffs/">forceCoeffs</a>
+                    <a href="/2312/tools/processing/models/turbulence/ras/linear-evm/rtm/kOmegaSST/">kOmegaSST</a>
+                """,
+                "https://doc.openfoam.com/2312/fundamentals/case-structure/controldict/": "<main><h1>controlDict</h1></main>",
+                "https://doc.openfoam.com/2312/fundamentals/case-structure/fvschemes/": "<main><h1>fvSchemes</h1></main>",
+                "https://doc.openfoam.com/2312/tools/processing/solvers/rtm/incompressible/simpleFoam/": "<main><h1>simpleFoam</h1></main>",
+                "https://doc.openfoam.com/2312/tools/post-processing/function-objects/forces/forceCoeffs/": "<main><h1>forceCoeffs</h1></main>",
+                "https://doc.openfoam.com/2312/tools/processing/models/turbulence/ras/linear-evm/rtm/kOmegaSST/": "<main><h1>kOmegaSST</h1></main>",
+            }
+
+        def get(self, url, timeout=None):
+            return FakeResponse(self.pages[url])
+
+    manifest = _discover_openfoam_manifest("2312", FakeSession())
+    page_names = {item["page_name"] for item in manifest}
+    assert "openfoam/controlDict" in page_names
+    assert "openfoam/fvSchemes" in page_names
+    assert "openfoam/simpleFoam" in page_names
+    assert "openfoam/forceCoeffs" in page_names
+    assert "openfoam/kOmegaSST" in page_names
+    assert all("installation" not in item["url"] for item in manifest)
 
 
 def test_build_openfoam_manifest_includes_specific_mesh_and_post_pages():
@@ -115,7 +191,199 @@ def test_build_bioinformatics_manifest_includes_high_value_entry_points():
     assert "github.com/lh3/minimap2" in pages["minimap2/manual"]["fallback_urls"][0]
     assert pages["bcftools/call"]["url"].endswith("/bcftools.html#call")
     assert pages["bcftools/mpileup"]["url"].endswith("/bcftools.html#mpileup")
-    assert pages["iqtree/ultrafast-bootstrap"]["url"].endswith("/Command-Reference#ultrafast-bootstrap")
+    assert pages["iqtree/ultrafast-bootstrap"]["url"].endswith("/Command-Reference#ultrafast-bootstrap-parameters")
+    assert pages["iqtree/ultrafast-bootstrap"]["anchor"] == "ultrafast-bootstrap-parameters"
+    assert pages["samtools/index"]["url"].endswith("/samtools-index.html")
+
+
+def test_extract_html_headings_with_ids_reads_h2_and_h3():
+    html = """
+    <h2 id="general-options">General options</h2>
+    <h3 id="call">bcftools call</h3>
+    <h4 id="ignored">ignored</h4>
+    """
+    headings = _extract_html_headings_with_ids(html)
+    assert headings == [
+        {"level": 2, "id": "general-options", "title": "General options"},
+        {"level": 3, "id": "call", "title": "bcftools call"},
+    ]
+
+
+def test_extract_html_anchor_fragment_cuts_section_until_next_peer_heading():
+    html = """
+    <main>
+      <h2 id="alpha">Alpha</h2>
+      <p>A</p>
+      <h3 id="beta">Beta</h3>
+      <p>B</p>
+      <h3 id="gamma">Gamma</h3>
+      <p>C</p>
+    </main>
+    """
+    fragment = _extract_html_anchor_fragment(html, "beta")
+    assert "Beta" in fragment
+    assert "B" in fragment
+    assert "Gamma" not in fragment
+
+
+def test_discover_bioinformatics_manifest_expands_from_official_index_pages():
+    class FakeResponse:
+        def __init__(self, text: str):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.pages = {
+                "https://www.htslib.org/doc/samtools.html": """
+                    <a href="samtools-flagstat.html">flagstat</a>
+                    <a href="samtools-depth.html">depth</a>
+                """,
+                "https://samtools.github.io/bcftools/bcftools.html": """
+                    <h3 id="call">bcftools call</h3>
+                    <h3 id="query">bcftools query</h3>
+                    <h2 id="expressions">EXPRESSIONS</h2>
+                """,
+                "https://iqtree.github.io/doc/Command-Reference": """
+                    <h2 id="general-options">General options</h2>
+                    <h2 id="ultrafast-bootstrap">Ultrafast bootstrap</h2>
+                    <h3 id="example-usages">Example usages</h3>
+                """,
+            }
+
+        def get(self, url, timeout=None):
+            return FakeResponse(self.pages[url])
+
+    manifest, prefetched = _discover_bioinformatics_manifest(
+        "2026-03-curated",
+        FakeSession(),
+        _build_bioinformatics_manifest("2026-03-curated"),
+    )
+    pages = {item["page_name"] for item in manifest}
+    assert "samtools/flagstat" in pages
+    assert "samtools/depth" in pages
+    assert "bcftools/query" in pages
+    assert "bcftools/expressions" in pages
+    assert "iqtree/general-options" in pages
+    assert "iqtree/ultrafast-bootstrap" in pages
+    items = {item["page_name"]: item for item in manifest}
+    assert items["bcftools/call"]["anchor"] == "call"
+    assert items["iqtree/ultrafast-bootstrap"]["anchor"] == "ultrafast-bootstrap"
+    assert "https://www.htslib.org/doc/samtools.html" in prefetched
+
+
+def test_discover_bioinformatics_manifest_upgrades_curated_alias_to_real_anchor():
+    class FakeResponse:
+        def __init__(self, text: str):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.pages = {
+                "https://www.htslib.org/doc/samtools.html": "",
+                "https://samtools.github.io/bcftools/bcftools.html": "",
+                "https://iqtree.github.io/doc/Command-Reference": """
+                    <h2 id="ultrafast-bootstrap-parameters">Ultrafast bootstrap parameters</h2>
+                """,
+            }
+
+        def get(self, url, timeout=None):
+            return FakeResponse(self.pages[url])
+
+    manifest, _ = _discover_bioinformatics_manifest(
+        "2026-03-curated",
+        FakeSession(),
+        _build_bioinformatics_manifest("2026-03-curated"),
+    )
+    items = {item["page_name"]: item for item in manifest}
+    assert items["iqtree/ultrafast-bootstrap"]["anchor"] == "ultrafast-bootstrap-parameters"
+    assert items["iqtree/ultrafast-bootstrap"]["url"].endswith(
+        "/Command-Reference#ultrafast-bootstrap-parameters"
+    )
+
+
+def test_discover_bioinformatics_manifest_reuses_cached_seed_pages(tmp_path):
+    class FailingSession:
+        def get(self, url, timeout=None):
+            from requests import RequestException
+
+            raise RequestException("timeout")
+
+    cache_vdir = tmp_path / "bio" / "2026-03-curated"
+    pages_dir = cache_vdir / "pages"
+    pages_dir.mkdir(parents=True)
+    (pages_dir / "001-bcftools-manual.html").write_text(
+        '<h3 id="query">bcftools query</h3><h3 id="view">bcftools view</h3>',
+        encoding="utf-8",
+    )
+    (pages_dir / "001-bcftools-manual.json").write_text(
+        json.dumps({"page_name": "bcftools/manual"}),
+        encoding="utf-8",
+    )
+
+    manifest, prefetched = _discover_bioinformatics_manifest(
+        "2026-03-curated",
+        FailingSession(),
+        _build_bioinformatics_manifest("2026-03-curated"),
+        cache_vdir=cache_vdir,
+    )
+
+    pages = {item["page_name"] for item in manifest}
+    assert "bcftools/query" in pages
+    assert "https://samtools.github.io/bcftools/bcftools.html" in prefetched
+
+
+def test_toolref_fetch_bioinformatics_reuses_prefetched_seed_html_for_anchor_pages(tmp_path, monkeypatch):
+    from scholaraio import toolref as mod
+
+    class FakeResponse:
+        def __init__(self, text: str):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.headers = {}
+
+        def get(self, url, timeout=60):
+            raise mod.requests.RequestException(f"unexpected fetch: {url}")
+
+    monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
+    monkeypatch.setattr(mod.requests, "Session", FakeSession)
+    monkeypatch.setattr(
+        mod,
+        "_discover_bioinformatics_manifest",
+        lambda version, session, manifest, cache_vdir=None: (
+            [
+                {
+                    "program": "bcftools",
+                    "section": "variant-calling",
+                    "page_name": "bcftools/query",
+                    "title": "bcftools query",
+                    "url": "https://samtools.github.io/bcftools/bcftools.html#query",
+                    "anchor": "query",
+                }
+            ],
+            {
+                "https://samtools.github.io/bcftools/bcftools.html": '<h3 id="query">bcftools query</h3><p>query body</p>'
+            },
+        ),
+    )
+    monkeypatch.setattr(mod, "_index_tool", lambda tool, version, cfg=None: 1)
+    monkeypatch.setattr(mod, "_set_current", lambda tool, version, cfg=None: None)
+
+    count = toolref_fetch("bioinformatics", version="2026-03-curated", force=True, cfg=None)
+
+    assert count == 1
+    page = tmp_path / "bioinformatics" / "2026-03-curated" / "pages" / "001-bcftools-query.html"
+    assert page.exists()
 
 
 def test_parse_manifest_html_extracts_main_text(tmp_path):
@@ -777,6 +1045,10 @@ def test_expand_search_query_adds_gromacs_aliases():
     assert "tcoupl" in expanded
     expanded = _expand_search_query("gromacs", "constraints h-bonds")
     assert "constraints" in expanded
+    expanded = _expand_search_query("gromacs", "temperature coupling")
+    assert "tcoupl" in expanded
+    expanded = _expand_search_query("gromacs", "pressure coupling")
+    assert "pcoupl" in expanded
 
 
 def test_toolref_search_gromacs_boosts_parameter_hits(tmp_path, monkeypatch):
@@ -883,6 +1155,165 @@ def test_toolref_search_gromacs_v_rescale_maps_to_tcoupl(tmp_path, monkeypatch):
     rows = toolref_search("gromacs", "v-rescale thermostat", cfg=None)
     assert rows
     assert rows[0]["page_name"] == "gromacs/mdp/tcoupl"
+
+
+def test_toolref_search_gromacs_pressure_coupling_prefers_pcoupl(tmp_path, monkeypatch):
+    from scholaraio import toolref as mod
+    import sqlite3
+
+    monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
+    tdir = tmp_path / "gromacs"
+    vdir = tdir / "2024"
+    vdir.mkdir(parents=True)
+    (tdir / "current").symlink_to(vdir, target_is_directory=True)
+
+    db = tdir / "toolref.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(mod._PAGES_SCHEMA)
+    conn.executescript(mod._FTS_SCHEMA)
+    conn.executescript(mod._FTS_TRIGGERS)
+    conn.execute(
+        """INSERT INTO toolref_pages
+           (tool, version, program, section, page_name, title, synopsis, content)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "gromacs",
+            "2024",
+            "gromacs",
+            "mdp",
+            "gromacs/mdp/pcoupl",
+            "pcoupl",
+            "pressure coupling",
+            "Pressure coupling master switch",
+        ),
+    )
+    conn.execute(
+        """INSERT INTO toolref_pages
+           (tool, version, program, section, page_name, title, synopsis, content)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "gromacs",
+            "2024",
+            "gromacs",
+            "mdp",
+            "gromacs/mdp/pcoupltype",
+            "pcoupltype",
+            "pressure coupling type",
+            "Select isotropic or anisotropic pressure coupling type",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    rows = toolref_search("gromacs", "pressure coupling", cfg=None)
+    assert rows
+    assert rows[0]["page_name"] == "gromacs/mdp/pcoupl"
+
+
+def test_toolref_search_bioinformatics_multiple_sequence_alignment_prefers_mafft(tmp_path, monkeypatch):
+    from scholaraio import toolref as mod
+    import sqlite3
+
+    monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
+    tdir = tmp_path / "bioinformatics"
+    vdir = tdir / "2026-03-curated"
+    vdir.mkdir(parents=True)
+    (tdir / "current").symlink_to(vdir, target_is_directory=True)
+
+    db = tdir / "toolref.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(mod._PAGES_SCHEMA)
+    conn.executescript(mod._FTS_SCHEMA)
+    conn.executescript(mod._FTS_TRIGGERS)
+    conn.execute(
+        """INSERT INTO toolref_pages
+           (tool, version, program, section, page_name, title, synopsis, content)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "bioinformatics",
+            "2026-03-curated",
+            "samtools",
+            "alignment",
+            "samtools/manual",
+            "samtools manual",
+            "manual",
+            "General utilities for FASTA and SAM workflows",
+        ),
+    )
+    conn.execute(
+        """INSERT INTO toolref_pages
+           (tool, version, program, section, page_name, title, synopsis, content)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "bioinformatics",
+            "2026-03-curated",
+            "mafft",
+            "phylogenetics",
+            "mafft/manual",
+            "MAFFT manual",
+            "multiple sequence alignment",
+            "Multiple sequence alignment for FASTA inputs",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    rows = toolref_search("bioinformatics", "multiple sequence alignment fasta", cfg=None)
+    assert rows
+    assert rows[0]["page_name"] == "mafft/manual"
+
+
+def test_toolref_search_bioinformatics_bam_indexing_prefers_samtools_index(tmp_path, monkeypatch):
+    from scholaraio import toolref as mod
+    import sqlite3
+
+    monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
+    tdir = tmp_path / "bioinformatics"
+    vdir = tdir / "2026-03-curated"
+    vdir.mkdir(parents=True)
+    (tdir / "current").symlink_to(vdir, target_is_directory=True)
+
+    db = tdir / "toolref.db"
+    conn = sqlite3.connect(db)
+    conn.executescript(mod._PAGES_SCHEMA)
+    conn.executescript(mod._FTS_SCHEMA)
+    conn.executescript(mod._FTS_TRIGGERS)
+    conn.execute(
+        """INSERT INTO toolref_pages
+           (tool, version, program, section, page_name, title, synopsis, content)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "bioinformatics",
+            "2026-03-curated",
+            "samtools",
+            "alignment",
+            "samtools/sort",
+            "samtools sort",
+            "sort bam",
+            "Sort BAM files before indexing",
+        ),
+    )
+    conn.execute(
+        """INSERT INTO toolref_pages
+           (tool, version, program, section, page_name, title, synopsis, content)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            "bioinformatics",
+            "2026-03-curated",
+            "samtools",
+            "alignment",
+            "samtools/index",
+            "samtools index",
+            "index bam",
+            "Create BAM indexes for region access",
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    rows = toolref_search("bioinformatics", "bam indexing", cfg=None)
+    assert rows
+    assert rows[0]["page_name"] == "samtools/index"
 
 
 def test_toolref_search_openfoam_boosts_yplus_page(tmp_path, monkeypatch):
