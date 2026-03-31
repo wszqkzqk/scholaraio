@@ -16,6 +16,30 @@ tags: ["scientific-computing", "bioinformatics", "genomics", "protein-structure"
 - 它**不**承担各个命令行工具的完整手册职责
 - 具体 CLI 选项、子命令、输入输出细节统一去查 `scholaraio toolref`
 
+## Agent 默认协议（toolref-first, toolchain-aware）
+
+Bioinformatics 不是单一程序，而是一组工具链。agent 必须先判断自己在用哪一个子工具，再决定怎么查。
+
+默认顺序：
+
+1. 先判断当前任务属于哪类：
+   - 同源搜索：BLAST
+   - 组装序列比对：minimap2
+   - BAM/SAM 处理：samtools
+   - 变异调用：bcftools
+   - 多序列比对：MAFFT
+   - 建树：IQ-TREE
+   - 结构预测：ESMFold
+2. 再用 `toolref show bioinformatics <program> ...` 或 `search --program <program>` 查对应程序
+3. 不要把“生信工具链”当一个大黑箱查
+4. 如果某个子工具当前 `toolref` 覆盖不全，agent 应先回退该工具的官方手册或 README，再继续任务
+5. 不要让普通用户自己补齐某个子工具的 `toolref`
+
+这意味着：
+- `bioinformatics` skill 负责先分流，再选工具
+- `toolref` 负责各子工具的接口细节
+- 当前覆盖不全时，复杂度应由 agent 吸收，而不是由用户承担
+
 ## 前置条件
 
 ```bash
@@ -62,6 +86,11 @@ scholaraio toolref search bioinformatics bootstrap tree --program iqtree
 - 在决定工具前先确认数据类型：组装序列、短读段、蛋白序列、树推断
 - 写命令前先查对应手册页，而不是靠记忆拼接参数
 - 报告结果时带上阈值、模型和置信度，而不是只给一张图
+
+如果遇到覆盖缺口：
+- 先回退到对应子工具的官方手册
+- 在回答里明确指出是哪个子工具存在 `toolref` 覆盖不足
+- 不要让用户为了当前分析去维护 `toolref`
 
 ## 核心工具链
 

@@ -16,6 +16,21 @@ tags: ["scientific-computing", "dft", "quantum-espresso", "condensed-matter", "f
 - 它**不**承担输入文件字段和程序参数手册的职责
 - 具体输入变量、namelist 字段、程序差异统一去查 `scholaraio toolref`
 
+## Agent 默认协议（toolref-first）
+
+对 QE 问题，agent 默认按这个顺序工作：
+
+1. 先判断任务属于哪个程序：`pw.x`、`ph.x`、`matdyn.x`、`q2r.x`、`dos.x`、`projwfc.x`
+2. 写输入文件或解释参数前，先用 `scholaraio toolref show qe ...` 查关键变量
+3. 不确定变量归属时，先 `search` 再 `show`
+4. 如果 `toolref` 已能回答，就不要把 skill 当第二份参数手册
+5. 如果 `toolref` 缺页或命中不好，先继续完成用户任务，再回报这是 `toolref` 覆盖缺口，而不是把补文档工作甩给用户
+
+这意味着：
+- 普通用户不需要自己打磨 QE `toolref`
+- agent 应优先自己查、自己判断、自己退化处理
+- 只有在同一缺口反复出现时，才值得进入正式 onboarding/维护流程
+
 ## 前置条件
 
 ```bash
@@ -58,6 +73,11 @@ scholaraio toolref show qe matdyn asr
 - 写 `.in` 文件前，先查关键变量
 - 不靠旧博客记忆 `SYSTEM` / `ELECTRONS` / `INPUTPH` 字段
 - 程序切换时先确认变量属于 `pw.x`、`ph.x`、`matdyn.x` 还是别的模块
+
+如果遇到覆盖缺口：
+- 先继续用官方手册或源码文档完成任务
+- 在回答里明确说明“这里使用了 `toolref` 之外的官方文档”
+- 不要要求用户自己先去补齐文档层
 
 ## 核心工作流
 

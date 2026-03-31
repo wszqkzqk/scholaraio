@@ -26,6 +26,7 @@ import logging
 import os
 import re
 import sqlite3
+import shutil
 import subprocess
 import re
 import textwrap
@@ -143,6 +144,78 @@ def _normalize_program_filter(tool: str, program: str) -> str:
     return prog
 
 
+def _normalize_alias_phrase(*parts: str) -> str:
+    phrase = " ".join((p or "").strip().lower() for p in parts if p and p.strip())
+    phrase = phrase.replace("_", " ")
+    phrase = re.sub(r"\s+", " ", phrase)
+    return phrase.strip()
+
+
+def _tokenize_rank_text(text: str) -> list[str]:
+    normalized = _normalize_alias_phrase(text)
+    return [token for token in normalized.split() if token]
+
+
+def _expanded_terms(query: str) -> list[str]:
+    return [part.strip().lower() for part in re.split(r"\s+or\s+", query, flags=re.IGNORECASE) if part.strip()]
+
+
+def _score_search_result(
+    tool: str,
+    normalized_query: str,
+    expanded_query: str,
+    row: sqlite3.Row,
+) -> tuple[int, float]:
+    title = (row["title"] or "").lower()
+    page_name = (row["page_name"] or "").lower()
+    synopsis = (row["synopsis"] or "").lower()
+    content = (row["content"] or "").lower()
+    section = (row["section"] or "").lower()
+    rank = float(row["rank"]) if row["rank"] is not None else 0.0
+
+    score = 0
+    normalized_slug = normalized_query.replace(" ", "-")
+    normalized_snake = normalized_query.replace(" ", "_")
+    query_tokens = _tokenize_rank_text(normalized_query)
+    expanded_terms = _expanded_terms(expanded_query)
+
+    if normalized_query and title == normalized_query:
+        score += 120
+    if normalized_query and (
+        page_name.endswith(f"/{normalized_query}")
+        or page_name.endswith(f"/{normalized_slug}")
+        or page_name.endswith(f"/{normalized_snake}")
+    ):
+        score += 110
+    if normalized_query and normalized_query in synopsis:
+        score += 90
+    if normalized_query and normalized_query in content:
+        score += 70
+
+    for term in expanded_terms:
+        if not term or term == normalized_query:
+            continue
+        if title == term:
+            score += 80
+        if page_name.endswith(f"/{term}") or page_name.endswith(f"/{term.replace(' ', '-')}"):
+            score += 75
+        if term in synopsis:
+            score += 55
+        if term in content:
+            score += 35
+
+    if query_tokens:
+        synopsis_hits = sum(1 for token in query_tokens if token in synopsis)
+        content_hits = sum(1 for token in query_tokens if token in content)
+        title_hits = sum(1 for token in query_tokens if token in title)
+        score += title_hits * 18 + synopsis_hits * 12 + content_hits * 6
+
+    if tool == "gromacs" and section == "mdp":
+        score += 20
+
+    return score, rank
+
+
 def _has_local_docs(tool: str, version: str, cfg: Config | None = None) -> bool:
     info = TOOL_REGISTRY[tool]
     vdir = _version_dir(tool, version, cfg)
@@ -195,6 +268,28 @@ def _manifest_missing_page_names(vdir: Path, manifest: list[dict]) -> list[str]:
     return [item["page_name"] for item in manifest if item["page_name"] not in present]
 
 
+def _copy_manifest_page_from_cache(src_vdir: Path, dst_vdir: Path, page_name: str) -> bool:
+    src_pages = src_vdir / "pages"
+    dst_pages = dst_vdir / "pages"
+    if not src_pages.exists() or not dst_pages.exists():
+        return False
+
+    for meta_path in src_pages.glob("*.json"):
+        html_path = meta_path.with_suffix(".html")
+        if not html_path.exists():
+            continue
+        try:
+            payload = json.loads(meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if payload.get("page_name") != page_name:
+            continue
+        shutil.copy2(html_path, dst_pages / html_path.name)
+        shutil.copy2(meta_path, dst_pages / meta_path.name)
+        return True
+    return False
+
+
 def _normalize_search_query(query: str) -> str:
     normalized = re.sub(r"[-_/]+", " ", query).strip()
     normalized = re.sub(r"\s+", " ", normalized)
@@ -212,6 +307,12 @@ def _expand_search_query(tool: str, query: str) -> str:
             expansions.extend(["forces", "force coeffs", "forcecoeffs"])
         if "q criterion" in normalized:
             expansions.extend(["function objects", "post processing", "qcriterion", "q"])
+        if "y plus" in normalized:
+            expansions.extend(["yplus", "wall function", "boundary layer"])
+        if "wall shear stress" in normalized:
+            expansions.extend(["wallshearstress", "wall shear", "shear stress"])
+        if "solver residuals" in normalized or normalized == "residuals":
+            expansions.extend(["residuals", "linear solver", "convergence"])
     elif tool == "lammps":
         if "phase transition pressure" in normalized or "shock pressure" in normalized:
             expansions.extend(["fix_nphug", "fix_msst", "fix_qbmsst", "shock"])
@@ -220,6 +321,15 @@ def _expand_search_query(tool: str, query: str) -> str:
             expansions.append("ecutrho")
         if "ecut wfc" in normalized:
             expansions.append("ecutwfc")
+    elif tool == "gromacs":
+        if "parrinello rahman" in normalized or "parrinello-rahman" in normalized:
+            expansions.extend(["pcoupl", "barostat", "pressure coupling"])
+        if "v rescale thermostat" in normalized or "v-rescale thermostat" in normalized:
+            expansions.extend(["tcoupl", "v rescale", "temperature coupling", "tau t", "ref t"])
+        if "nose hoover thermostat" in normalized or "nose-hoover thermostat" in normalized:
+            expansions.extend(["tcoupl", "nose hoover", "temperature coupling", "tau t"])
+        if "constraints h bonds" in normalized or "constraints h-bonds" in normalized:
+            expansions.extend(["constraints", "h bonds", "constraint algorithm"])
     elif tool == "bioinformatics":
         if "phylogenetic tree" in normalized:
             expansions.extend(["iqtree", "mafft", "phylogenetics"])
@@ -326,6 +436,27 @@ def _build_openfoam_manifest(version: str) -> list[dict]:
             "page_name": "openfoam/Q",
             "title": "Q",
             "url": f"{base}/tools/post-processing/function-objects/field/Q/",
+        },
+        {
+            "program": "yPlus",
+            "section": "post-processing",
+            "page_name": "openfoam/yPlus",
+            "title": "yPlus",
+            "url": f"{base}/tools/post-processing/function-objects/field/yPlus/",
+        },
+        {
+            "program": "wallShearStress",
+            "section": "post-processing",
+            "page_name": "openfoam/wallShearStress",
+            "title": "wallShearStress",
+            "url": f"{base}/tools/post-processing/function-objects/field/wallShearStress/",
+        },
+        {
+            "program": "residuals",
+            "section": "solver-control",
+            "page_name": "openfoam/residuals",
+            "title": "Residuals",
+            "url": f"{base}/tools/processing/numerics/solvers/residuals/",
         },
     ]
 
@@ -723,6 +854,11 @@ def _parse_lammps_rst(filepath: Path) -> list[dict]:
         for c in commands
         if "/gpu" not in c and "/intel" not in c and "/kk" not in c and "/omp" not in c and "/opt" not in c
     ]
+    alias_commands: list[str] = []
+    for command in commands:
+        normalized_command = _normalize_alias_phrase(command)
+        if normalized_command and normalized_command not in alias_commands:
+            alias_commands.append(normalized_command)
 
     # extract first title (the primary command)
     title_match = re.search(r"^(.+?)\n={3,}", text, re.MULTILINE)
@@ -763,9 +899,15 @@ def _parse_lammps_rst(filepath: Path) -> list[dict]:
         cb = re.search(r"\.\.\s+code-block::\s+LAMMPS\s*\n\n((?:\s+.+\n?)+)", sections["syntax"])
         if cb:
             synopsis = cb.group(1).strip().split("\n")[0].strip()
+    if alias_commands:
+        alias_text = ", ".join(alias_commands[:12])
+        synopsis = f"{synopsis} | Aliases: {alias_text}" if synopsis else f"Aliases: {alias_text}"
 
     # build full content (Syntax + Description, truncated)
     content_parts = []
+    if alias_commands:
+        content_parts.append("Alias keys: " + " ".join(f"|{alias}|" for alias in alias_commands[:20]))
+        content_parts.append("Aliases:\n" + "\n".join(f"- {alias}" for alias in alias_commands[:20]))
     if "syntax" in sections:
         content_parts.append("Syntax:\n" + sections["syntax"][:1000])
     if "description" in sections:
@@ -810,22 +952,27 @@ def _parse_gromacs_rst(filepath: Path) -> list[dict]:
 
     # Special handling for mdp-options.rst (the core parameter reference)
     if stem == "mdp-options":
-        # Parse .. mdp:: directive blocks
-        mdp_pattern = re.compile(
-            r"\.\.\s+mdp::\s+(\S+)\s*\n((?:.*\n)*?)"
-            r"(?=\.\.\s+mdp::|$)",
-            re.MULTILINE,
-        )
-        for m in mdp_pattern.finditer(text):
-            param_name = m.group(1).strip()
-            block = m.group(2)
+        starts = list(re.finditer(r"(?m)^\.\.\s+mdp::\s+(\S+)\s*$", text))
+        for idx, match in enumerate(starts):
+            param_name = match.group(1).strip()
+            start = match.end()
+            end = starts[idx + 1].start() if idx + 1 < len(starts) else len(text)
+            block = text[start:end].strip()
 
-            # extract mdp-value options
-            values = re.findall(r"\.\.\s+mdp-value::\s+(\S+)", block)
-
-            # clean the description
-            desc = re.sub(r"\.\.\s+mdp-value::\s+\S+", "", block)
-            desc = re.sub(r"\s+", " ", desc).strip()[:2000]
+            values = [v.strip() for v in re.findall(r"(?m)^\s*\.\.\s+mdp-value::\s+(.+?)\s*$", block)]
+            cleaned_lines: list[str] = []
+            for line in block.splitlines():
+                stripped = line.strip()
+                if stripped.startswith(".. mdp-value::"):
+                    value = stripped.split("::", 1)[1].strip()
+                    cleaned_lines.append(f"Option: {value}")
+                    continue
+                cleaned_lines.append(line.rstrip())
+            cleaned = "\n".join(cleaned_lines)
+            cleaned = re.sub(r":mdp:`([^`]+)`", r"\1", cleaned)
+            cleaned = re.sub(r":mdp-value:`([^`]+)`", r"\1", cleaned)
+            cleaned = re.sub(r"\s+\n", "\n", cleaned)
+            cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
 
             synopsis = "MDP parameter"
             if values:
@@ -841,7 +988,7 @@ def _parse_gromacs_rst(filepath: Path) -> list[dict]:
                     "var_type": "",
                     "default_val": "",
                     "synopsis": synopsis,
-                    "content": f"{param_name}\n\n{block.strip()[:3000]}",
+                    "content": f"{param_name}\n\n{cleaned[:3000]}",
                 }
             )
         return records
@@ -1113,8 +1260,6 @@ def toolref_fetch(
                 ui(f"[toolref] {info['display_name']} {version}：已索引 {count} 个文档页面")
                 return count
 
-            import shutil
-
             ui(f"[toolref] 检测到 {info['display_name']} {version} 残缺目录，重新拉取")
         elif vdir.exists() and force:
             ui(f"[toolref] 强制重新拉取 {info['display_name']} {version}")
@@ -1176,8 +1321,6 @@ def toolref_fetch(
                 src = tmppath / info["doc_path"]
                 if src.exists():
                     dest = vdir / "src"
-                    import shutil
-
                     if dest.exists():
                         shutil.rmtree(dest)
                     shutil.copytree(src, dest)
@@ -1191,7 +1334,6 @@ def toolref_fetch(
         session.headers.update({"User-Agent": "ScholarAIO/1.3 toolref-fetch"})
         manifest = _build_manifest(tool, version)
         ui(f"[toolref] 正在拉取 {info['display_name']} {version} 官方文档页...")
-        import shutil
         import tempfile
 
         failures: list[str] = []
@@ -1215,6 +1357,12 @@ def toolref_fetch(
                     encoding="utf-8",
                 )
 
+            restored_failures: list[str] = []
+            if vdir.exists() and failures:
+                for page_name in failures:
+                    if _copy_manifest_page_from_cache(vdir, staged_vdir, page_name):
+                        restored_failures.append(page_name)
+
             fetched_pages = _manifest_page_count(staged_vdir)
             if failures and fetched_pages == 0:
                 raise RuntimeError(f"拉取 {tool} 文档页失败：{failures[0]}")
@@ -1230,8 +1378,11 @@ def toolref_fetch(
                 "fetched_pages": fetched_pages,
                 "expected_pages": len(manifest),
                 "failed_pages": len(manifest) - fetched_pages,
-                "failed_page_names": failures,
+                "failed_page_names": [name for name in failures if name not in restored_failures],
             }
+            if restored_failures:
+                meta["last_fetch_failed_page_names"] = failures
+                meta["restored_from_cache_page_names"] = restored_failures
             (staged_vdir / "meta.json").write_text(
                 json.dumps(meta, indent=2, ensure_ascii=False),
                 encoding="utf-8",
@@ -1530,6 +1681,7 @@ def toolref_show(
 
     query_parts = [a.lower() for a in args]
     query_str = "/".join(query_parts)
+    alias_phrase = _normalize_alias_phrase(*query_parts)
 
     # try exact page_name match first
     rows = conn.execute(
@@ -1538,6 +1690,30 @@ def toolref_show(
            AND (LOWER(page_name) = ? OR LOWER(page_name) = ?)""",
         (tool, version, version, query_str, f"{tool}/{query_str}"),
     ).fetchall()
+
+    if not rows:
+        if tool == "qe" and len(query_parts) >= 2:
+            program = _normalize_program_filter(tool, query_parts[0])
+            title_query = query_parts[-1]
+            rows = conn.execute(
+                """SELECT * FROM toolref_pages
+                   WHERE tool = ? AND (version = ? OR ? IS NULL)
+                   AND LOWER(program) = ? AND LOWER(title) = ?
+                   ORDER BY LENGTH(page_name)
+                   LIMIT 20""",
+                (tool, version, version, program, title_query),
+            ).fetchall()
+
+    if not rows and alias_phrase:
+        exact_alias_key = f"%|{alias_phrase}|%"
+        rows = conn.execute(
+            """SELECT * FROM toolref_pages
+               WHERE tool = ? AND (version = ? OR ? IS NULL)
+               AND LOWER(content) LIKE ?
+               ORDER BY LENGTH(page_name)
+               LIMIT 20""",
+            (tool, version, version, exact_alias_key),
+        ).fetchall()
 
     if not rows:
         # try exact suffix match (useful for "simpleFoam" -> "openfoam/simpleFoam")
@@ -1589,6 +1765,24 @@ def toolref_show(
             (tool, version, version, query_parts[0]),
         ).fetchall()
 
+    if not rows and alias_phrase:
+        like_alias = f"%{alias_phrase}%"
+        exact_alias_key = f"%|{alias_phrase}|%"
+        rows = conn.execute(
+            """SELECT * FROM toolref_pages
+               WHERE tool = ? AND (version = ? OR ? IS NULL)
+               AND (LOWER(synopsis) LIKE ? OR LOWER(content) LIKE ?)
+               ORDER BY
+                 CASE
+                   WHEN LOWER(content) LIKE ? THEN 0
+                   WHEN LOWER(synopsis) LIKE ? THEN 1
+                   ELSE 2
+                 END,
+                 LENGTH(page_name)
+               LIMIT 20""",
+            (tool, version, version, like_alias, like_alias, exact_alias_key, like_alias),
+        ).fetchall()
+
     conn.close()
     return [dict(r) for r in rows]
 
@@ -1637,6 +1831,7 @@ def toolref_search(
 
     normalized_query = _normalize_search_query(query)
     expanded_query = _expand_search_query(tool, query)
+    alias_phrase = _normalize_alias_phrase(normalized_query)
 
     # build FTS5 query — auto-convert spaces to OR for better recall
     fts_query = expanded_query
@@ -1668,7 +1863,27 @@ def toolref_search(
             sql += " AND LOWER(p.section) = ?"
             params.append(section.lower())
 
-        sql += " ORDER BY rank LIMIT ?"
+        sql += """
+            ORDER BY
+              CASE
+                WHEN LOWER(p.title) = ? THEN 0
+                WHEN LOWER(p.content) LIKE ? THEN 1
+                WHEN LOWER(p.page_name) = ? OR LOWER(p.page_name) LIKE ? THEN 2
+                WHEN LOWER(p.synopsis) LIKE ? THEN 3
+                ELSE 4
+              END,
+              rank
+            LIMIT ?
+        """
+        params.extend(
+            [
+                normalized_query.lower(),
+                f"%|{alias_phrase}|%",
+                normalized_query.lower(),
+                f"%/{normalized_query.lower().replace(' ', '_')}",
+                f"%{alias_phrase}%",
+            ]
+        )
         params.append(top_k)
 
         rows = conn.execute(sql, params).fetchall()
@@ -1689,4 +1904,11 @@ def toolref_search(
             rows = []
 
     conn.close()
-    return [dict(r) for r in rows]
+    ranked_rows = sorted(
+        rows,
+        key=lambda row: (
+            -_score_search_result(tool, normalized_query.lower(), expanded_query.lower(), row)[0],
+            _score_search_result(tool, normalized_query.lower(), expanded_query.lower(), row)[1],
+        ),
+    )
+    return [dict(r) for r in ranked_rows[:top_k]]

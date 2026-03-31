@@ -16,6 +16,21 @@ tags: ["scientific-computing", "molecular-dynamics", "drug-design", "gromacs", "
 - 它**不**充当完整命令手册
 - 具体命令行选项、`.mdp` 参数、子命令语法统一去查 `scholaraio toolref`
 
+## Agent 默认协议（toolref-first）
+
+对 GROMACS 问题，agent 默认按这个顺序工作：
+
+1. 先判断问题属于哪一层：`gmx` 子命令、`.mdp` 参数、分析工具、力场/拓扑流程
+2. 写 `.mdp` 前先查 thermostat、barostat、constraints、cutoff、输出频率这类高风险参数
+3. 对用户自然语言说法，先 `search` 再 `show`
+4. 如果 `toolref` 已经能回答，就不要在 skill 中重复堆参数表
+5. 如果 `toolref` 缺页或命中不理想，agent 应先完成任务，并明确这是 `toolref` 覆盖缺口，而不是用户需要自己手动适配
+
+这意味着：
+- 普通用户不需要自己打磨 GROMACS 参数映射
+- agent 应优先自己把 `Parrinello-Rahman`、`v-rescale thermostat`、`constraints h-bonds` 等问法映射到参数页
+- `skill` 负责路线和规范，`toolref` 负责参数与接口
+
 ## 前置条件
 
 ```bash
@@ -59,6 +74,11 @@ scholaraio toolref show gromacs mdp ref-t
 - 写 `.mdp` 前，先逐项查核心参数
 - 不靠记忆拼写 thermostat/barostat 选项
 - 对“这项参数在当前版本是否还推荐”这类问题，优先相信 `toolref` 而不是旧教程
+
+如果遇到覆盖缺口：
+- 先继续使用 GROMACS 官方文档完成任务
+- 在输出中点明这里超出了当前 `toolref` 覆盖
+- 不要把补齐 `toolref` 当成普通用户的前置工作
 
 ## 核心流程
 

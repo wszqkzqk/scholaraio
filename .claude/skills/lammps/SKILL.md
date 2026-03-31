@@ -16,6 +16,21 @@ tags: ["scientific-computing", "molecular-dynamics", "materials-science", "lammp
 - 它**不**承担完整接口手册的职责
 - 具体命令、参数、语法、package 限制，统一去查 `scholaraio toolref`
 
+## Agent 默认协议（toolref-first）
+
+对 LAMMPS 问题，agent 默认按这个顺序工作：
+
+1. 先判断问题属于哪类对象：`pair_style`、`fix`、`compute`、`dump`、`region`、`boundary`、`run` 流程
+2. 写输入脚本前，优先查高风险命令页，而不是凭记忆拼装
+3. 命令名和用户说法不一致时，优先用 `search` 找主入口，再用 `show`
+4. 如果 `toolref` 已能回答，就不要在 skill 里重复写手册
+5. 如果 `toolref` 命中不好或某个 package 页面缺失，agent 应先完成任务，再把它标记为维护层缺口，而不是让用户自己补
+
+这意味着：
+- 用户不该自己去打磨 `fix` / `pair_style` 的映射关系
+- agent 应自己消化 `fix npt -> fix_nh`、`pair style eam -> pair_eam` 这类入口差异
+- 只有反复出现的缺口才进入正式 onboarding
+
 ## 前置条件
 
 ```bash
@@ -58,6 +73,11 @@ scholaraio toolref show lammps fix_deform
 - 写脚本前先查 `pair_style` / `fix` / `compute` / `dump`
 - 遇到 package 依赖时先用 `toolref show` 看 Restrictions
 - 遇到模糊概念先用 `toolref search`，确定候选命令后再 `show`
+
+如果遇到覆盖缺口：
+- 先用官方 LAMMPS 文档继续完成任务
+- 明确说明这里是 `toolref` 覆盖/排序缺口，不是用户操作错误
+- 不要让用户为了当前任务先停下来维护文档层
 
 ## 核心流程
 

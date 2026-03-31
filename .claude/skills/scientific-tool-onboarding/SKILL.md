@@ -13,6 +13,11 @@ description: Use when adding or upgrading ScholarAIO support for a new scientifi
 - 对应 `skill` 能指导 agent 何时使用、如何验证
 - CLI 在真实使用中足够稳，不只是测试能过
 
+规范参考：
+
+- tool skill 写法统一参照 [docs/internal/scientific-cli-skill-spec.md](/home/lzmo/repos/personal/scholaraio/docs/internal/scientific-cli-skill-spec.md)
+- 运行时行为统一参照 `scientific-runtime` skill
+
 ## When to Use
 
 适用于：
@@ -115,12 +120,14 @@ scholaraio toolref search <tool> "<real query>"
 - 科学规范
 - `toolref` 查询入口
 - agent 行为准则
+- 覆盖缺口时如何退化处理
 
 不要把 skill 写成第二份 API 手册。
 
 分工应始终是：
 - `skill = 路由 + 方法论 + 验证规范`
 - `toolref = 官方接口与参数`
+- `scientific-runtime = 运行时退化与用户体验协议`
 
 ### 8. 最后做发布门槛检查
 
@@ -137,6 +144,7 @@ scholaraio toolref search <tool> "<real query>"
 - 第一次抓取失败后没处理脏目录
 - `page_name` 为抓取方便而设计，导致 `show` 很难用
 - 把 scientific skill 写成超长命令手册
+- 新 skill 没有写清楚覆盖缺口时 agent 应如何继续服务用户
 - 用第三方教程代替官方文档
 - 把“能跑起来”误当成“生产级”
 
@@ -149,4 +157,5 @@ scholaraio toolref search <tool> "<real query>"
 - `fetch/list/show/search` 已手动体验
 - 残缺目录问题已验证
 - 对应 skill 已改成轻量结构
+- 新 skill 与 `scientific-runtime` 协议兼容
 - 最终再跑一次相关测试与 CLI smoke
