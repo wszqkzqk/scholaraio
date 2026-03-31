@@ -481,6 +481,12 @@ ingest:
   extractor: robust         # auto | regex | llm | robust
   mineru_endpoint: http://localhost:8000
   mineru_cloud_url: https://mineru.net/api/v4
+  mineru_backend_local: pipeline      # pipeline | vlm-auto-engine | vlm-http-client | hybrid-auto-engine | hybrid-http-client
+  mineru_model_version_cloud: pipeline # pipeline | vlm | MinerU-HTML
+  mineru_lang: ch
+  mineru_parse_method: auto           # auto | txt | ocr
+  mineru_enable_formula: true
+  mineru_enable_table: true
   abstract_llm_mode: verify # off | fallback | verify
 
 # Semantic embeddings (Qwen3-Embedding-0.6B, ~1.2 GB, auto-downloaded)
@@ -490,6 +496,7 @@ embed:
   device: auto              # auto | cpu | cuda
   top_k: 10
   source: modelscope        # modelscope | huggingface
+  hf_endpoint: null         # optional HuggingFace mirror endpoint
 
 search:
   top_k: 20

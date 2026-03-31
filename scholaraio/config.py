@@ -97,6 +97,7 @@ class EmbedConfig:
         device: 推理设备，``"auto"`` | ``"cpu"`` | ``"cuda"``。
         top_k: ``scholaraio vsearch`` 默认返回条数。
         source: 模型下载源，``"modelscope"`` | ``"huggingface"``。
+        hf_endpoint: HuggingFace 镜像地址（可选），用于无代理或私有镜像。
     """
 
     model: str = "Qwen/Qwen3-Embedding-0.6B"
@@ -104,6 +105,7 @@ class EmbedConfig:
     device: str = "auto"
     top_k: int = 10
     source: str = "modelscope"
+    hf_endpoint: str = ""
 
 
 @dataclass
@@ -149,6 +151,14 @@ class IngestConfig:
         mineru_endpoint: MinerU 本地 API 地址。
         mineru_cloud_url: MinerU 云 API 基础 URL。
         mineru_api_key: MinerU 云 API 密钥，建议放 config.local.yaml 或环境变量。
+        mineru_backend_local: 本地 MinerU backend（``pipeline`` | ``vlm-auto-engine`` |
+            ``vlm-http-client`` | ``hybrid-auto-engine`` | ``hybrid-http-client``）。
+        mineru_model_version_cloud: 云端 MinerU model_version（``pipeline`` | ``vlm`` |
+            ``MinerU-HTML``）。
+        mineru_lang: MinerU OCR 语言（``ch`` | ``en`` | ``latin`` 等）。
+        mineru_parse_method: 本地 MinerU 解析方式（``auto`` | ``txt`` | ``ocr``）。
+        mineru_enable_formula: 是否启用公式解析。
+        mineru_enable_table: 是否启用表格解析。
         abstract_llm_mode: abstract 提取时的 LLM 介入模式：
 
             - ``"off"``：纯正则，不使用 LLM。
@@ -167,6 +177,12 @@ class IngestConfig:
     mineru_endpoint: str = "http://localhost:8000"
     mineru_cloud_url: str = "https://mineru.net/api/v4"
     mineru_api_key: str = ""
+    mineru_backend_local: str = "pipeline"
+    mineru_model_version_cloud: str = "pipeline"
+    mineru_lang: str = "ch"
+    mineru_parse_method: str = "auto"
+    mineru_enable_formula: bool = True
+    mineru_enable_table: bool = True
     abstract_llm_mode: str = "verify"  # off | fallback | verify
     contact_email: str = ""
     s2_api_key: str = ""  # Semantic Scholar API key for higher rate limits
@@ -428,6 +444,21 @@ def _deep_merge(base: dict, override: dict) -> dict:
     return result
 
 
+def _bool_or_default(value: object, default: bool) -> bool:
+    """Return ``default`` for ``None``; otherwise coerce common bool-like values."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in {"true", "1", "yes", "on"}:
+            return True
+        if text in {"false", "0", "no", "off"}:
+            return False
+    return bool(value)
+
+
 def _build_config(data: dict, root: Path) -> Config:
     """Build Config dataclass from raw dict."""
     paths_data = data.get("paths", {}) or {}
@@ -455,6 +486,12 @@ def _build_config(data: dict, root: Path) -> Config:
         mineru_endpoint=ingest_data.get("mineru_endpoint", "http://localhost:8000"),
         mineru_cloud_url=ingest_data.get("mineru_cloud_url", "https://mineru.net/api/v4"),
         mineru_api_key=ingest_data.get("mineru_api_key") or "",
+        mineru_backend_local=ingest_data.get("mineru_backend_local", "pipeline"),
+        mineru_model_version_cloud=ingest_data.get("mineru_model_version_cloud", "pipeline"),
+        mineru_lang=ingest_data.get("mineru_lang", "ch"),
+        mineru_parse_method=ingest_data.get("mineru_parse_method", "auto"),
+        mineru_enable_formula=_bool_or_default(ingest_data.get("mineru_enable_formula"), True),
+        mineru_enable_table=_bool_or_default(ingest_data.get("mineru_enable_table"), True),
         abstract_llm_mode=ingest_data.get("abstract_llm_mode", "verify"),
         contact_email=ingest_data.get("contact_email") or "",
         s2_api_key=ingest_data.get("s2_api_key") or "",
@@ -463,12 +500,21 @@ def _build_config(data: dict, root: Path) -> Config:
     )
 
     embed_data = data.get("embed", {}) or {}
+    embed_source = os.environ.get("SCHOLARAIO_EMBED_SOURCE") or embed_data.get("source") or "modelscope"
+    embed_cache_dir = (
+        os.environ.get("SCHOLARAIO_EMBED_CACHE_DIR") or embed_data.get("cache_dir") or "~/.cache/modelscope/hub/models"
+    )
+    embed_model = os.environ.get("SCHOLARAIO_EMBED_MODEL") or embed_data.get("model") or "Qwen/Qwen3-Embedding-0.6B"
+    hf_endpoint = (
+        os.environ.get("SCHOLARAIO_HF_ENDPOINT") or embed_data.get("hf_endpoint") or os.environ.get("HF_ENDPOINT") or ""
+    )
     embed = EmbedConfig(
-        model=embed_data.get("model", "Qwen/Qwen3-Embedding-0.6B"),
-        cache_dir=embed_data.get("cache_dir", "~/.cache/modelscope/hub/models"),
+        model=embed_model,
+        cache_dir=embed_cache_dir,
         device=embed_data.get("device", "auto"),
         top_k=int(embed_data.get("top_k", 10)),
-        source=embed_data.get("source", "modelscope"),
+        source=embed_source,
+        hf_endpoint=hf_endpoint,
     )
 
     search_data = data.get("search", {}) or {}

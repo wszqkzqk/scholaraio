@@ -180,6 +180,9 @@ Main config: `config.yaml` (tracked). Secrets: `config.local.yaml` (gitignored).
 > **Both are optional.** Without LLM: regex-only extraction. Without MinerU: place `.md` files in `data/inbox/` directly.
 
 Embedding model (Qwen3-Embedding-0.6B, ~1.2 GB) auto-downloads on first use. Default source: ModelScope (no proxy needed in China). International users: set `embed.source: huggingface` in config.
+You can also override embedding source/model cache via environment variables: `SCHOLARAIO_EMBED_SOURCE`, `SCHOLARAIO_EMBED_CACHE_DIR`, `SCHOLARAIO_EMBED_MODEL`, and optional mirror `SCHOLARAIO_HF_ENDPOINT` (fallback to `HF_ENDPOINT`).
+
+Optional web browsing integration: see [`docs/guide/webtools-integration.md`](docs/guide/webtools-integration.md) for using ScholarAIO together with [claude-webtools](https://github.com/AnterCreeper/claude-webtools).
 
 Full config reference → [`config.yaml`](config.yaml)
 

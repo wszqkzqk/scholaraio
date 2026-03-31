@@ -209,6 +209,12 @@ def step_mineru(ctx: InboxCtx) -> StepResult:
     mineru_opts = ConvertOptions(
         api_url=ctx.cfg.ingest.mineru_endpoint,
         output_dir=ctx.inbox_dir,
+        backend=ctx.cfg.ingest.mineru_backend_local,
+        cloud_model_version=ctx.cfg.ingest.mineru_model_version_cloud,
+        lang=ctx.cfg.ingest.mineru_lang,
+        parse_method=ctx.cfg.ingest.mineru_parse_method,
+        formula_enable=ctx.cfg.ingest.mineru_enable_formula,
+        table_enable=ctx.cfg.ingest.mineru_enable_table,
     )
 
     chunk_limit = getattr(ctx.cfg.ingest, "chunk_page_limit", 100)
@@ -930,7 +936,15 @@ def _process_inbox(
         if pdfs_to_convert:
             from scholaraio.ingest.mineru import ConvertOptions, convert_pdfs_cloud_batch
 
-            mineru_opts = ConvertOptions(output_dir=inbox_dir)
+            mineru_opts = ConvertOptions(
+                output_dir=inbox_dir,
+                backend=cfg.ingest.mineru_backend_local,
+                cloud_model_version=cfg.ingest.mineru_model_version_cloud,
+                lang=cfg.ingest.mineru_lang,
+                parse_method=cfg.ingest.mineru_parse_method,
+                formula_enable=cfg.ingest.mineru_enable_formula,
+                table_enable=cfg.ingest.mineru_enable_table,
+            )
             t_batch_start = time.time()
             batch_results = convert_pdfs_cloud_batch(
                 pdfs_to_convert,
@@ -1448,6 +1462,12 @@ def batch_convert_pdfs(
             mineru_opts = ConvertOptions(
                 api_url=cfg.ingest.mineru_endpoint,
                 output_dir=pdir,
+                backend=cfg.ingest.mineru_backend_local,
+                cloud_model_version=cfg.ingest.mineru_model_version_cloud,
+                lang=cfg.ingest.mineru_lang,
+                parse_method=cfg.ingest.mineru_parse_method,
+                formula_enable=cfg.ingest.mineru_enable_formula,
+                table_enable=cfg.ingest.mineru_enable_table,
             )
             result = convert_pdf(pdf_path, mineru_opts)
             if not result.success:
@@ -1479,7 +1499,15 @@ def batch_convert_pdfs(
 
         with tempfile.TemporaryDirectory(prefix="scholaraio_batch_") as tmp:
             tmp_dir = Path(tmp)
-            batch_opts = ConvertOptions(output_dir=tmp_dir)
+            batch_opts = ConvertOptions(
+                output_dir=tmp_dir,
+                backend=cfg.ingest.mineru_backend_local,
+                cloud_model_version=cfg.ingest.mineru_model_version_cloud,
+                lang=cfg.ingest.mineru_lang,
+                parse_method=cfg.ingest.mineru_parse_method,
+                formula_enable=cfg.ingest.mineru_enable_formula,
+                table_enable=cfg.ingest.mineru_enable_table,
+            )
 
             batch_results = convert_pdfs_cloud_batch(
                 pdf_paths,

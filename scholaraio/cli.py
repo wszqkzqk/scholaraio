@@ -2489,6 +2489,12 @@ def cmd_attach_pdf(args: argparse.Namespace, cfg) -> None:
     mineru_opts = ConvertOptions(
         api_url=cfg.ingest.mineru_endpoint,
         output_dir=paper_d,
+        backend=cfg.ingest.mineru_backend_local,
+        cloud_model_version=cfg.ingest.mineru_model_version_cloud,
+        lang=cfg.ingest.mineru_lang,
+        parse_method=cfg.ingest.mineru_parse_method,
+        formula_enable=cfg.ingest.mineru_enable_formula,
+        table_enable=cfg.ingest.mineru_enable_table,
     )
 
     if check_server(cfg.ingest.mineru_endpoint):
