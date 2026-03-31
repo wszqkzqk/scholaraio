@@ -485,26 +485,13 @@ def _build_config(data: dict, root: Path) -> Config:
     )
 
     embed_data = data.get("embed", {}) or {}
-    embed_source = (
-        os.environ.get("SCHOLARAIO_EMBED_SOURCE")
-        or embed_data.get("source")
-        or "modelscope"
-    )
+    embed_source = os.environ.get("SCHOLARAIO_EMBED_SOURCE") or embed_data.get("source") or "modelscope"
     embed_cache_dir = (
-        os.environ.get("SCHOLARAIO_EMBED_CACHE_DIR")
-        or embed_data.get("cache_dir")
-        or "~/.cache/modelscope/hub/models"
+        os.environ.get("SCHOLARAIO_EMBED_CACHE_DIR") or embed_data.get("cache_dir") or "~/.cache/modelscope/hub/models"
     )
-    embed_model = (
-        os.environ.get("SCHOLARAIO_EMBED_MODEL")
-        or embed_data.get("model")
-        or "Qwen/Qwen3-Embedding-0.6B"
-    )
+    embed_model = os.environ.get("SCHOLARAIO_EMBED_MODEL") or embed_data.get("model") or "Qwen/Qwen3-Embedding-0.6B"
     hf_endpoint = (
-        os.environ.get("SCHOLARAIO_HF_ENDPOINT")
-        or embed_data.get("hf_endpoint")
-        or os.environ.get("HF_ENDPOINT")
-        or ""
+        os.environ.get("SCHOLARAIO_HF_ENDPOINT") or embed_data.get("hf_endpoint") or os.environ.get("HF_ENDPOINT") or ""
     )
     embed = EmbedConfig(
         model=embed_model,
