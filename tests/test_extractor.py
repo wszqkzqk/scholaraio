@@ -64,7 +64,9 @@ class TestLLMExtractor:
         monkeypatch.setattr(
             ext,
             "_call_api",
-            lambda header: '{"title":"Universal transport laws in buoyancy-driven porous mixing","authors":["Marco De Paoli"],"year":2025,"doi":null,"journal":"arXiv"}',
+            lambda header: (
+                '{"title":"Universal transport laws in buoyancy-driven porous mixing","authors":["Marco De Paoli"],"year":2025,"doi":null,"journal":"arXiv"}'
+            ),
         )
 
         meta = ext.extract(md)
@@ -85,7 +87,9 @@ class TestRobustExtractor:
         monkeypatch.setattr(
             ext,
             "_call_api",
-            lambda prompt: '{"title":"Universal transport laws in buoyancy-driven porous mixing","authors":["Marco De Paoli"],"year":2025,"doi":null,"journal":"arXiv"}',
+            lambda prompt: (
+                '{"title":"Universal transport laws in buoyancy-driven porous mixing","authors":["Marco De Paoli"],"year":2025,"doi":null,"journal":"arXiv"}'
+            ),
         )
 
         meta = ext.extract(md)

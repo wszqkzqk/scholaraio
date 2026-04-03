@@ -130,9 +130,9 @@ class LLMExtractor:
     def extract(self, filepath: Path) -> PaperMetadata:
         from scholaraio.ingest.metadata import (
             PaperMetadata,
-            extract_metadata_from_markdown,
             _extract_from_filename,
             _extract_lastname,
+            extract_metadata_from_markdown,
         )
 
         text = filepath.read_text(encoding="utf-8", errors="replace")

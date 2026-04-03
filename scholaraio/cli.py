@@ -244,7 +244,7 @@ def cmd_search(args: argparse.Namespace, cfg) -> None:
 
 
 def cmd_show(args: argparse.Namespace, cfg) -> None:
-    from scholaraio.loader import load_l1, load_l2, load_l3, load_l4, load_notes, append_notes
+    from scholaraio.loader import append_notes, load_l1, load_l2, load_l3, load_l4, load_notes
     from scholaraio.metrics import get_store
 
     paper_d = _resolve_paper(args.paper_id, cfg)

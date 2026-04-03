@@ -13,12 +13,12 @@ from scholaraio.toolref import (
     _extract_html_headings_with_ids,
     _extract_openfoam_doc_links,
     _has_local_docs,
-    _normalize_search_query,
     _normalize_openfoam_doc_url,
     _normalize_program_filter,
+    _normalize_search_query,
     _parse_lammps_rst,
-    _pick_manifest_synopsis,
     _parse_manifest_html,
+    _pick_manifest_synopsis,
     toolref_fetch,
     toolref_list,
     toolref_search,
@@ -158,7 +158,9 @@ def test_build_openfoam_manifest_includes_specific_mesh_and_post_pages():
     manifest = _build_openfoam_manifest("2312")
     pages = {item["page_name"]: item for item in manifest}
 
-    assert pages["openfoam/blockMesh"]["url"].endswith("/2312/tools/pre-processing/mesh/generation/blockMesh/blockmesh/")
+    assert pages["openfoam/blockMesh"]["url"].endswith(
+        "/2312/tools/pre-processing/mesh/generation/blockMesh/blockmesh/"
+    )
     assert pages["openfoam/forceCoeffs"]["url"].endswith(
         "/2312/tools/post-processing/function-objects/forces/forceCoeffs/"
     )
@@ -302,9 +304,7 @@ def test_discover_bioinformatics_manifest_upgrades_curated_alias_to_real_anchor(
     )
     items = {item["page_name"]: item for item in manifest}
     assert items["iqtree/ultrafast-bootstrap"]["anchor"] == "ultrafast-bootstrap-parameters"
-    assert items["iqtree/ultrafast-bootstrap"]["url"].endswith(
-        "/Command-Reference#ultrafast-bootstrap-parameters"
-    )
+    assert items["iqtree/ultrafast-bootstrap"]["url"].endswith("/Command-Reference#ultrafast-bootstrap-parameters")
 
 
 def test_discover_bioinformatics_manifest_reuses_cached_seed_pages(tmp_path):
@@ -439,7 +439,9 @@ def test_has_local_docs_for_manifest_html(tmp_path, monkeypatch):
 
     manifest = _build_openfoam_manifest("2312")
     for idx, item in enumerate(manifest, start=1):
-        (pages_dir / f"{idx:03d}-{item['page_name'].replace('/', '-')}.html").write_text("<html></html>", encoding="utf-8")
+        (pages_dir / f"{idx:03d}-{item['page_name'].replace('/', '-')}.html").write_text(
+            "<html></html>", encoding="utf-8"
+        )
         (pages_dir / f"{idx:03d}-{item['page_name'].replace('/', '-')}.json").write_text("{}", encoding="utf-8")
     assert _has_local_docs("openfoam", "2312")
 
@@ -699,7 +701,9 @@ def test_toolref_fetch_manifest_force_preserves_failed_pages_from_existing_cache
     vdir = tmp_path / "openfoam" / "2312"
     pages_dir = vdir / "pages"
     pages_dir.mkdir(parents=True)
-    (pages_dir / "001-openfoam-simpleFoam.html").write_text("<html><body>cached simpleFoam</body></html>", encoding="utf-8")
+    (pages_dir / "001-openfoam-simpleFoam.html").write_text(
+        "<html><body>cached simpleFoam</body></html>", encoding="utf-8"
+    )
     (pages_dir / "001-openfoam-simpleFoam.json").write_text(
         json.dumps(
             {
@@ -782,8 +786,9 @@ def test_toolref_fetch_manifest_uses_fallback_urls(tmp_path, monkeypatch):
 
 
 def test_toolref_show_falls_back_to_program_manual_page(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "bioinformatics"
@@ -844,14 +849,17 @@ fix nvt command
 .. index:: fix nph
 
 Syntax
-""""""""
+"""
+        """""
 
 .. code-block:: LAMMPS
 
    fix ID group-ID style_name keyword value ...
 
 Description
-"""""""""""""
+"""
+        """"""
+        """"
 
 Thermostat and barostat.
 """,
@@ -865,8 +873,9 @@ Thermostat and barostat.
 
 
 def test_toolref_show_qe_prefers_exact_program_title_match(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "qe"
@@ -898,8 +907,9 @@ def test_toolref_show_qe_prefers_exact_program_title_match(tmp_path, monkeypatch
 
 
 def test_toolref_show_lammps_resolves_alias_from_query(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "lammps"
@@ -951,8 +961,9 @@ def test_toolref_show_lammps_resolves_alias_from_query(tmp_path, monkeypatch):
 
 
 def test_toolref_search_lammps_boosts_exact_alias_match(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "lammps"
@@ -1052,8 +1063,9 @@ def test_expand_search_query_adds_gromacs_aliases():
 
 
 def test_toolref_search_gromacs_boosts_parameter_hits(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "gromacs"
@@ -1105,8 +1117,9 @@ def test_toolref_search_gromacs_boosts_parameter_hits(tmp_path, monkeypatch):
 
 
 def test_toolref_search_gromacs_v_rescale_maps_to_tcoupl(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "gromacs"
@@ -1158,8 +1171,9 @@ def test_toolref_search_gromacs_v_rescale_maps_to_tcoupl(tmp_path, monkeypatch):
 
 
 def test_toolref_search_gromacs_pressure_coupling_prefers_pcoupl(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "gromacs"
@@ -1211,8 +1225,9 @@ def test_toolref_search_gromacs_pressure_coupling_prefers_pcoupl(tmp_path, monke
 
 
 def test_toolref_search_bioinformatics_multiple_sequence_alignment_prefers_mafft(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "bioinformatics"
@@ -1264,8 +1279,9 @@ def test_toolref_search_bioinformatics_multiple_sequence_alignment_prefers_mafft
 
 
 def test_toolref_search_bioinformatics_bam_indexing_prefers_samtools_index(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "bioinformatics"
@@ -1317,8 +1333,9 @@ def test_toolref_search_bioinformatics_bam_indexing_prefers_samtools_index(tmp_p
 
 
 def test_toolref_search_openfoam_boosts_yplus_page(tmp_path, monkeypatch):
-    from scholaraio import toolref as mod
     import sqlite3
+
+    from scholaraio import toolref as mod
 
     monkeypatch.setattr(mod, "_DEFAULT_TOOLREF_DIR", tmp_path)
     tdir = tmp_path / "openfoam"

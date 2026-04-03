@@ -288,11 +288,13 @@ class TestGetArxivPaperFallback:
         </head></html>
         """
 
-        with patch("scholaraio.sources.arxiv._query_arxiv_api", return_value=[]):
-            with patch("scholaraio.sources.arxiv._SESSION.get", return_value=_mock_response(html)):
-                from scholaraio.sources.arxiv import get_arxiv_paper
+        with (
+            patch("scholaraio.sources.arxiv._query_arxiv_api", return_value=[]),
+            patch("scholaraio.sources.arxiv._SESSION.get", return_value=_mock_response(html)),
+        ):
+            from scholaraio.sources.arxiv import get_arxiv_paper
 
-                result = get_arxiv_paper("2603.25200")
+            result = get_arxiv_paper("2603.25200")
 
         assert result["title"] == "Fallback Title"
         assert result["authors"] == ["Alice Smith", "Bob Jones"]

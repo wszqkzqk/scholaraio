@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 import defusedxml.ElementTree as ET
 import requests
 from bs4 import BeautifulSoup
+from urllib3.util.retry import Retry
 
 _log = logging.getLogger(__name__)
 
@@ -37,7 +38,7 @@ _SESSION = requests.Session()
 _SESSION.headers.update({"User-Agent": _user_agent()})
 _SESSION.trust_env = False
 _retry = requests.adapters.HTTPAdapter(
-    max_retries=requests.packages.urllib3.util.retry.Retry(
+    max_retries=Retry(
         total=2,
         backoff_factor=1,
         status_forcelist=[429, 502, 503, 504],

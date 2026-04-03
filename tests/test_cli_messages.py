@@ -59,9 +59,7 @@ class TestShowLayer4Headings:
 class TestShowNotesIntegration:
     def test_notes_displayed_after_header(self, tmp_papers, monkeypatch):
         paper_dir = tmp_papers / "Smith-2023-Turbulence"
-        (paper_dir / "notes.md").write_text(
-            "## 2026-03-26 | test | analysis\n- Key finding\n", encoding="utf-8"
-        )
+        (paper_dir / "notes.md").write_text("## 2026-03-26 | test | analysis\n- Key finding\n", encoding="utf-8")
 
         messages: list[str] = []
         monkeypatch.setattr(cli, "ui", messages.append)
@@ -202,7 +200,8 @@ class TestArxivCommands:
         messages: list[str] = []
         monkeypatch.setattr(cli, "ui", messages.append)
         monkeypatch.setattr(
-            "scholaraio.sources.arxiv.download_arxiv_pdf", lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError("timeout"))
+            "scholaraio.sources.arxiv.download_arxiv_pdf",
+            lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError("timeout")),
         )
 
         cfg = SimpleNamespace(_root=tmp_path, papers_dir=tmp_path / "data" / "papers")
