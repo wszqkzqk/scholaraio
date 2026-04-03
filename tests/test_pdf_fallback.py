@@ -72,6 +72,20 @@ def test_pick_and_write_md_preserves_assets(tmp_path):
     assert (md_dir / "images" / "figure.png").read_bytes() == b"pngdata"
 
 
+def test_pick_and_write_md_preserves_leading_whitespace(tmp_path):
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    original = "    code block line\n\nparagraph\n\n"
+    (out_dir / "doc.md").write_text(original, encoding="utf-8")
+
+    md = tmp_path / "final.md"
+    ok, err = pdf_fallback.pick_and_write_md(out_dir, md, "docling")
+
+    assert ok is True
+    assert err is None
+    assert md.read_text(encoding="utf-8") == "    code block line\n\nparagraph\n"
+
+
 def test_public_pdf_fallback_helpers_are_available():
     assert callable(pdf_fallback.run_pymupdf)
     assert callable(pdf_fallback.pick_and_write_md)

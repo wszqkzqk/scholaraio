@@ -177,6 +177,10 @@ class TestBuildConfig:
         assert cfg.ingest.mineru_batch_size == 200
         assert cfg.ingest.pdf_preferred_parser == "mineru"
 
+    def test_mineru_lang_is_normalized_to_lowercase(self, tmp_path):
+        cfg = _build_config({"ingest": {"mineru_lang": " EN "}}, tmp_path)
+        assert cfg.ingest.mineru_lang == "en"
+
     def test_zero_or_negative_mineru_batch_size_uses_default(self, tmp_path):
         cfg = _build_config({"ingest": {"mineru_batch_size": 0}}, tmp_path)
         assert cfg.ingest.mineru_batch_size == 20

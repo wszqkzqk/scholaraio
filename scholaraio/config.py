@@ -508,7 +508,7 @@ def _normalize_mineru_pdf_cloud_model_version(value: object) -> str:
 
 def _normalize_mineru_lang(value: object) -> str:
     """Normalize MinerU language with a safe default."""
-    text = str(value or "").strip()
+    text = str(value or "").strip().lower()
     return text or "ch"
 
 

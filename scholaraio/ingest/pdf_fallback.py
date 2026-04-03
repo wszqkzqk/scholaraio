@@ -166,12 +166,12 @@ def pick_and_write_md(out_dir: Path, md_path: Path, parser_name: str) -> tuple[b
         return False, f"{parser_name} 未生成 markdown 输出"
 
     selected = max(candidates, key=lambda p: p.stat().st_size)
-    content = selected.read_text(encoding="utf-8", errors="ignore").strip()
-    if not content:
+    content = selected.read_text(encoding="utf-8", errors="ignore")
+    if not content.strip():
         return False, f"{parser_name} 生成 markdown 为空"
 
     copy_parser_assets(selected, md_path)
-    md_path.write_text(content + "\n", encoding="utf-8")
+    md_path.write_text(content.rstrip() + "\n", encoding="utf-8")
     _log.info("fallback parser %s -> %s", parser_name, md_path.name)
     return True, None
 

@@ -546,7 +546,7 @@ def run_wizard(cfg: Config | None = None) -> None:
     cfg = load_config()
     cfg.ensure_dirs()
 
-    # Step 3: API keys
+    # Step 3: PDF parser
     print(f"\n{t('step_parser', lang)}")
     parser_choice = _wizard_parser(cfg, lang)
 
@@ -557,7 +557,7 @@ def run_wizard(cfg: Config | None = None) -> None:
     # Import hint
     print(t("import_hint", lang))
 
-    # Step 4: Verify
+    # Step 5: Verify
     print(f"{t('step_verify', lang)}")
     cfg = load_config()  # reload with new keys
     results = run_check(cfg, lang)
@@ -671,7 +671,11 @@ def _wizard_keys(root: Path, lang: Lang, parser_choice: ParserChoice | None = No
     local_path = root / "config.local.yaml"
     local_data: dict = {}
     if local_path.exists():
-        local_data = yaml.safe_load(local_path.read_text(encoding="utf-8")) or {}
+        local_data_raw = yaml.safe_load(local_path.read_text(encoding="utf-8")) or {}
+        if isinstance(local_data_raw, dict):
+            local_data = local_data_raw
+        else:
+            local_data = {}
 
     changed = False
     ingest_local_raw = local_data.get("ingest")
