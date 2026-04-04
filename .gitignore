@@ -31,6 +31,7 @@ config.local.yaml
 # Developer docs (not published)
 docs-dev/
 docs/issues.md
+docs/internal/
 
 # Local agent worktrees
 .claude/worktrees/
