@@ -930,6 +930,7 @@ def _process_inbox(
     *,
     is_thesis: bool = False,
     is_patent: bool = False,
+    is_proceedings: bool = False,
     existing_pub_nums: dict[str, Path] | None = None,
     existing_arxiv_ids: dict[str, Path] | None = None,
 ) -> None:
@@ -953,7 +954,7 @@ def _process_inbox(
     if not inbox_dir.exists():
         return
 
-    label_prefix = "[thesis] " if is_thesis else ""
+    label_prefix = "[thesis] " if is_thesis else ("[proceedings] " if is_proceedings else "")
 
     entries: dict[str, dict[str, Path | None]] = {}
     for pdf in sorted(inbox_dir.glob("*.pdf")):
@@ -1114,11 +1115,19 @@ def _process_inbox(
             existing_pub_nums=existing_pub_nums,
             existing_arxiv_ids=existing_arxiv_ids,
         )
+        if is_proceedings and _ingest_proceedings_ctx(ctx, force=True):
+            stats["ingested"] += 1
+            continue
         for step_name in file_steps:
             with timer(f"pipeline.inbox.{step_name}", "step") as t:
                 result = STEPS[step_name].fn(ctx)
             step_times[step_name] = step_times.get(step_name, 0) + t.elapsed
             _log.debug("%s: %.1fs", step_name, t.elapsed)
+            if step_name == "extract":
+                detected, _reason = _detect_proceedings(ctx)
+                if detected and _ingest_proceedings_ctx(ctx, force=False):
+                    result = StepResult.FAIL
+                    break
             if result != StepResult.OK:
                 break
 
@@ -1282,6 +1291,23 @@ def run_pipeline(
                 dry_run,
                 ingested_jsons,
                 is_thesis=False,
+                existing_pub_nums=existing_pub_nums,
+                existing_arxiv_ids=existing_arxiv_ids,
+            )
+
+        proceedings_inbox = cfg._root / "data" / "inbox-proceedings"
+        if include_aux_inboxes and proceedings_inbox.exists():
+            _process_inbox(
+                proceedings_inbox,
+                papers_dir,
+                pending_dir,
+                existing_dois,
+                inbox_steps,
+                cfg,
+                opts,
+                dry_run,
+                ingested_jsons,
+                is_proceedings=True,
                 existing_pub_nums=existing_pub_nums,
                 existing_arxiv_ids=existing_arxiv_ids,
             )
@@ -1975,6 +2001,22 @@ def _detect_proceedings(ctx: InboxCtx, *, force: bool = False) -> tuple[bool, st
     if not ctx.md_path or not ctx.md_path.exists():
         return False, ""
     return detect_proceedings_from_md(ctx.md_path, force=force)
+
+
+def _ingest_proceedings_ctx(ctx: InboxCtx, *, force: bool) -> bool:
+    """Route a markdown entry into the proceedings library."""
+    from scholaraio.ingest.proceedings import ingest_proceedings_markdown
+
+    if not ctx.md_path or not ctx.md_path.exists():
+        return False
+
+    proceedings_root = ctx.cfg._root / "data" / "proceedings"
+    source_name = ctx.pdf_path.name if ctx.pdf_path else ctx.md_path.name
+    ingest_proceedings_markdown(proceedings_root, ctx.md_path, source_name=source_name)
+    _cleanup_inbox(ctx.pdf_path, ctx.md_path, dry_run=ctx.opts.get("dry_run", False))
+    ctx.status = "ingested"
+    ui("检测为论文集，已转入 data/proceedings/")
+    return True
 
 
 def _detect_book(ctx: InboxCtx) -> bool:
