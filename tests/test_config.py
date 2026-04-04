@@ -147,6 +147,20 @@ class TestBuildConfig:
         cfg = _build_config(data, tmp_path)
         assert cfg.zotero.library_id == "12345"
 
+    def test_translate_defaults_are_exposed(self, tmp_path):
+        cfg = _build_config({}, tmp_path)
+        assert cfg.translate.auto_translate is False
+        assert cfg.translate.target_lang == "zh"
+        assert cfg.translate.chunk_size == 4000
+        assert cfg.translate.concurrency == 5
+
+    def test_zotero_library_type_default_and_override(self, tmp_path):
+        cfg = _build_config({}, tmp_path)
+        assert cfg.zotero.library_type == "user"
+
+        cfg2 = _build_config({"zotero": {"library_type": "group"}}, tmp_path)
+        assert cfg2.zotero.library_type == "group"
+
     def test_mineru_formula_and_table_null_use_defaults(self, tmp_path):
         data = {
             "ingest": {

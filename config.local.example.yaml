@@ -23,8 +23,11 @@ ingest:
 # Zotero integration (optional) Zotero 集成（可选）
 # API key: https://www.zotero.org/settings/keys
 # Library ID: visible in your Zotero web library URL
+# Library type: user or group (default user)
 # API 密钥：https://www.zotero.org/settings/keys
 # Library ID：在 Zotero 网页版 URL 中可见
+# Library 类型：user 或 group（默认 user）
 zotero:
   api_key: ""
   library_id: ""
+  library_type: "user"

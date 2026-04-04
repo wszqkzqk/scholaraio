@@ -791,6 +791,15 @@ logging:
 
 topics:
   min_topic_size: 5
-  nr_topics: -1             # 0=auto, -1=no merging, positive=target count
+  nr_topics: 0              # 0=auto, -1=no merging, positive=target count
   model_dir: data/topic_model
+
+translate:
+  auto_translate: false
+  target_lang: zh
+  chunk_size: 4000
+  concurrency: 5
+
+zotero:
+  library_type: user
 """

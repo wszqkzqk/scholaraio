@@ -256,6 +256,7 @@ class Config:
         search: 全文检索配置。
         topics: BERTopic 主题建模配置。
         log: 日志与指标配置。
+        translate: 自动翻译配置。
         zotero: Zotero 集成配置。
     """
 

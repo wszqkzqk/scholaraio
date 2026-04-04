@@ -91,5 +91,16 @@ logging:
 # Topic modeling 主题建模
 topics:
   min_topic_size: 5 # HDBSCAN min cluster size 最小聚类大小
-  nr_topics: -1 # 0=auto, -1=no merge, N=target count 目标主题数
+  nr_topics: 0 # 0=auto, -1=no merge, N=target count 目标主题数
   model_dir: data/topic_model # Model save directory 模型保存目录
+
+# Translation 翻译
+translate:
+  auto_translate: false # Auto-translate non-target-language papers during pipeline ingest 是否在入库时自动翻译
+  target_lang: zh # Target language code 目标语言代码
+  chunk_size: 4000 # Max chars per translation chunk 分块翻译最大字符数
+  concurrency: 5 # Concurrent translation workers 并发翻译数
+
+# Zotero integration Zotero 集成
+zotero:
+  library_type: user # user | group
