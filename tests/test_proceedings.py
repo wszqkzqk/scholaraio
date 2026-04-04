@@ -894,12 +894,15 @@ def test_apply_proceedings_clean_plan_renames_drops_and_reclassifies(tmp_path: P
     meta = json.loads((proceeding_dir / "meta.json").read_text(encoding="utf-8"))
     child_dirs = sorted((proceeding_dir / "papers").iterdir())
     child_meta = json.loads((child_dirs[0] / "meta.json").read_text(encoding="utf-8"))
+    results = search_proceedings("porous", proceedings_root / "proceedings.db", top_k=10)
 
     assert meta["title"] == "Granular Flow Workshop"
     assert meta["child_paper_count"] == 1
     assert child_meta["title"] == "Wave Propagation in Porous Media (Position Paper)"
     assert child_meta["paper_type"] == "position-paper"
+    assert child_meta["proceeding_title"] == "Granular Flow Workshop"
     assert child_dirs[0].name == "Wave-Propagation-in-Porous-Media-Position-Paper"
+    assert {row["proceeding_title"] for row in results} == {"Granular Flow Workshop"}
 
 
 def test_apply_proceedings_clean_plan_removes_bogus_heading_tags_without_touching_body(tmp_path: Path):

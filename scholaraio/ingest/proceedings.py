@@ -385,11 +385,19 @@ def apply_proceedings_clean_plan(proceeding_dir: Path, clean_plan: dict | Path) 
     remaining = sorted(path for path in papers_dir.iterdir() if path.is_dir())
     meta_path = proceeding_dir / "meta.json"
     proceeding_meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    updated_volume_title = None
     if plan.get("volume_title"):
-        proceeding_meta["title"] = str(plan["volume_title"]).strip()
+        updated_volume_title = str(plan["volume_title"]).strip()
+        proceeding_meta["title"] = updated_volume_title
     proceeding_meta["child_paper_count"] = len(remaining)
     proceeding_meta["clean_status"] = "applied"
     meta_path.write_text(json.dumps(proceeding_meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    if updated_volume_title:
+        for paper_dir in remaining:
+            paper_meta_path = paper_dir / "meta.json"
+            paper_meta = json.loads(paper_meta_path.read_text(encoding="utf-8"))
+            paper_meta["proceeding_title"] = updated_volume_title
+            paper_meta_path.write_text(json.dumps(paper_meta, ensure_ascii=False, indent=2), encoding="utf-8")
     (proceeding_dir / "clean_plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
     build_proceedings_index(proceeding_dir.parent, proceeding_dir.parent / "proceedings.db", rebuild=False)
     return proceeding_dir
