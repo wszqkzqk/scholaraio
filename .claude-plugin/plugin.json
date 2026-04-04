@@ -1,6 +1,6 @@
 {
   "name": "scholaraio",
-  "description": "Academic research terminal for Claude Code — search, read, and analyze papers from your local knowledge base while coding. Includes literature search, layered reading, ingestion, topic modeling, citation graphs, scientific tool docs, academic writing workflows, and more. Requires Python 3.10+ and pip install.",
+  "description": "Academic research terminal for Claude Code — search, read, and analyze papers from your local knowledge base while coding. Includes arXiv discovery, layered reading, ingestion, topic modeling, citation graphs, insights analytics, Office document inspection, scientific tool docs, and academic writing workflows. Requires Python 3.10+ and pip install.",
   "version": "1.3.0",
   "author": {
     "name": "ZimoLiao",
@@ -17,6 +17,10 @@
     "citation",
     "citations",
     "papers",
+    "arxiv",
+    "toolref",
+    "insights",
+    "office-documents",
     "scholarly-writing",
     "knowledge-base",
     "semantic-search",
