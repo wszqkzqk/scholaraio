@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from scholaraio.ingest.proceedings import detect_proceedings_from_md, looks_like_proceedings_text
 from scholaraio.index import build_proceedings_index, search_proceedings
 from scholaraio.proceedings import iter_proceedings_papers
 
@@ -89,3 +90,48 @@ def test_build_and_search_proceedings_index_returns_matching_child_rows(tmp_path
     assert len(results) == 2
     assert {r["proceeding_title"] for r in results} == {"Example Proceedings"}
     assert {r["paper_id"] for r in results} == {"proc-paper-1", "proc-paper-2"}
+
+
+def test_detect_proceedings_manual_mode_forces_true(tmp_path: Path):
+    md_path = tmp_path / "volume.md"
+    md_path.write_text("A perfectly ordinary paper body.", encoding="utf-8")
+
+    detected, reason = detect_proceedings_from_md(md_path, force=True)
+
+    assert detected is True
+    assert reason == "manual_inbox"
+
+
+def test_detect_proceedings_from_regular_inbox_cues(tmp_path: Path):
+    md_path = tmp_path / "volume.md"
+    md_path.write_text(
+        "# Proceedings of the IUTAM Symposium on Granular Flow\n\n"
+        "## Table of Contents\n\n"
+        "1. Wave propagation in porous media\n"
+        "2. Shock response of cellular materials\n\n"
+        "10.1000/example.1\n"
+        "10.1000/example.2\n",
+        encoding="utf-8",
+    )
+
+    detected, reason = detect_proceedings_from_md(md_path)
+
+    assert detected is True
+    assert reason in {"title_keyword", "table_of_contents", "multi_doi"}
+
+
+def test_detect_proceedings_rejects_regular_single_paper(tmp_path: Path):
+    md_path = tmp_path / "paper.md"
+    md_path.write_text(
+        "# Boundary layer instability in compressible flow\n\n"
+        "Alice Smith, Bob Wang\n\n"
+        "10.1000/example.single\n\n"
+        "This paper studies a single wave packet in compressible flow.\n",
+        encoding="utf-8",
+    )
+
+    detected, reason = detect_proceedings_from_md(md_path)
+
+    assert detected is False
+    assert reason == ""
+    assert looks_like_proceedings_text(md_path.read_text(encoding="utf-8")) is False

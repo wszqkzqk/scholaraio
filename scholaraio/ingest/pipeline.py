@@ -1968,6 +1968,15 @@ def _detect_thesis(ctx: InboxCtx) -> bool:
     return False
 
 
+def _detect_proceedings(ctx: InboxCtx, *, force: bool = False) -> tuple[bool, str]:
+    """Check whether the current markdown looks like a proceedings volume."""
+    from scholaraio.ingest.proceedings import detect_proceedings_from_md
+
+    if not ctx.md_path or not ctx.md_path.exists():
+        return False, ""
+    return detect_proceedings_from_md(ctx.md_path, force=force)
+
+
 def _detect_book(ctx: InboxCtx) -> bool:
     """LLM 判断无 DOI 论文是否为书籍/专著。
 
