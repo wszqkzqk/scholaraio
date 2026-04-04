@@ -273,6 +273,47 @@ class TestArxivCommands:
         assert any("arXiv 下载失败" in m for m in messages)
 
 
+class TestFederatedArxivPresence:
+    def test_fsearch_marks_arxiv_only_ingested_paper_as_present(self, tmp_path, monkeypatch):
+        messages: list[str] = []
+        monkeypatch.setattr(cli, "ui", lambda msg="": messages.append(msg))
+        monkeypatch.setattr(
+            cli,
+            "_search_arxiv",
+            lambda query, top_k: [
+                {
+                    "title": "String Junctions and Their Duals in Heterotic String Theory",
+                    "authors": ["Y. Imamura"],
+                    "year": "1999",
+                    "arxiv_id": "hep-th/9901001",
+                    "doi": "",
+                }
+            ],
+        )
+        monkeypatch.setattr(cli, "_query_dois_for_set", lambda cfg, doi_set: set())
+
+        paper_dir = tmp_path / "papers" / "Imamura-1999-String-Junctions"
+        paper_dir.mkdir(parents=True)
+        (paper_dir / "meta.json").write_text(
+            json.dumps(
+                {
+                    "id": "paper-1",
+                    "title": "String Junctions and Their Duals in Heterotic String Theory",
+                    "arxiv_id": "hep-th/9901001v3",
+                    "ids": {"arxiv": "hep-th/9901001v3"},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        cfg = SimpleNamespace(papers_dir=tmp_path / "papers", index_db=tmp_path / "missing.db")
+        args = Namespace(query=["string", "junctions"], scope="arxiv", top=5)
+
+        cli.cmd_fsearch(args, cfg)
+
+        assert any("[已入库]" in m for m in messages)
+
+
 class TestTranslateCliProgress:
     def test_cmd_translate_reports_resumable_partial_progress(self, tmp_papers, monkeypatch):
         messages: list[str] = []

@@ -375,3 +375,26 @@ class TestDownloadArxivPdf:
 
         assert out == tmp_path / "hep-th_9901001.pdf"
         assert out.read_bytes() == pdf_bytes
+
+    def test_download_cleans_up_partial_file_when_stream_fails(self, tmp_path):
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+
+        def broken_stream(chunk_size=0):
+            yield b"%PDF-1.4 partial"
+            raise RuntimeError("network interrupted")
+
+        resp.iter_content.side_effect = broken_stream
+
+        with patch("scholaraio.sources.arxiv._SESSION.get", return_value=resp):
+            from scholaraio.sources.arxiv import download_arxiv_pdf
+
+            try:
+                download_arxiv_pdf("2603.25200", tmp_path)
+            except RuntimeError as exc:
+                assert "network interrupted" in str(exc)
+            else:
+                raise AssertionError("expected RuntimeError")
+
+        assert not (tmp_path / "2603.25200.pdf").exists()
+        assert not list(tmp_path.glob("2603.25200.pdf.*"))

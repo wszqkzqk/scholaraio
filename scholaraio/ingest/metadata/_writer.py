@@ -151,11 +151,16 @@ def refetch_metadata(json_path: Path) -> bool:
 
     enrich_metadata(meta)
 
-    if not meta.api_sources:
+    restored_old_api_state = False
+    should_restore_old_api_state = not meta.api_sources or (
+        set(meta.api_sources).issubset({"arxiv"}) and old_citation_count
+    )
+    if should_restore_old_api_state:
         meta.citation_count_crossref = old_citation_count.get("crossref")
         meta.citation_count_s2 = old_citation_count.get("semantic_scholar")
         meta.citation_count_openalex = old_citation_count.get("openalex")
         meta.api_sources = old_api_sources
+        restored_old_api_state = True
 
     new_data = metadata_to_dict(meta)
 
@@ -184,6 +189,10 @@ def refetch_metadata(json_path: Path) -> bool:
                 else oa
             )
         return ids_norm
+
+    if restored_old_api_state:
+        new_data["citation_count"] = data.get("citation_count", {})
+        new_data["api_sources"] = old_api_sources
 
     changed = False
     string_like_keys = {

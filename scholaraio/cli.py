@@ -1914,6 +1914,38 @@ def _query_dois_for_set(cfg, doi_set: list[str]) -> set[str]:
         return set()
 
 
+def _query_arxiv_ids_for_set(cfg, arxiv_id_set: list[str]) -> set[str]:
+    """Return the subset of normalized arXiv IDs that exists in the main library."""
+    from scholaraio.papers import iter_paper_dirs, read_meta
+    from scholaraio.sources.arxiv import normalize_arxiv_ref
+
+    if not arxiv_id_set or not Path(cfg.papers_dir).exists():
+        return set()
+
+    wanted: set[str] = set()
+    for arxiv_id in arxiv_id_set:
+        normalized = normalize_arxiv_ref(arxiv_id)
+        if normalized:
+            wanted.add(normalized)
+    if not wanted:
+        return set()
+
+    found: set[str] = set()
+    try:
+        for paper_dir in iter_paper_dirs(Path(cfg.papers_dir)):
+            try:
+                meta = read_meta(paper_dir)
+            except Exception:
+                continue
+            arxiv_id = meta.get("arxiv_id") or (meta.get("ids") or {}).get("arxiv", "")
+            normalized = normalize_arxiv_ref(arxiv_id)
+            if normalized and normalized in wanted:
+                found.add(normalized)
+    except Exception:
+        return set()
+    return found
+
+
 def cmd_fsearch(args: argparse.Namespace, cfg) -> None:
     query = " ".join(args.query)
     top_k = _resolve_top(args, 10)
@@ -1997,15 +2029,24 @@ def cmd_fsearch(args: argparse.Namespace, cfg) -> None:
             else:
                 # Only query the library for DOIs that actually appear in results
                 arxiv_dois = [r["doi"].lower() for r in arxiv_results if r.get("doi")]
+                arxiv_ids = [r.get("arxiv_id", "") for r in arxiv_results if r.get("arxiv_id")]
                 in_lib_dois = _query_dois_for_set(cfg, arxiv_dois)
+                in_lib_arxiv_ids = _query_arxiv_ids_for_set(cfg, arxiv_ids)
                 for i, r in enumerate(arxiv_results, 1):
+                    from scholaraio.sources.arxiv import normalize_arxiv_ref
+
                     authors = r.get("authors", [])
                     first = (authors[0] if authors else "?") + (" et al." if len(authors) > 1 else "")
                     doi = r.get("doi", "")
-                    in_lib = bool(doi and doi.lower() in in_lib_dois)
+                    arxiv_id = r.get("arxiv_id", "")
+                    normalized_arxiv_id = normalize_arxiv_ref(arxiv_id)
+                    in_lib = bool(
+                        (doi and doi.lower() in in_lib_dois)
+                        or (normalized_arxiv_id and normalized_arxiv_id in in_lib_arxiv_ids)
+                    )
                     status = "  [已入库]" if in_lib else ""
                     ui(f"  [{i}] [{r.get('year', '?')}] {r.get('title', '')}{status}")
-                    ui(f"       {first} | arxiv:{r.get('arxiv_id', '')}" + (f" | doi:{doi}" if doi else ""))
+                    ui(f"       {first} | arxiv:{arxiv_id}" + (f" | doi:{doi}" if doi else ""))
                     ui()
 
         else:

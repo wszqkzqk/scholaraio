@@ -740,7 +740,7 @@ def step_translate(json_path: Path, cfg: Config, opts: dict) -> StepResult:
         opts: 运行选项。
 
     Returns:
-        ``StepResult.OK`` 成功, ``StepResult.SKIP`` 跳过。
+        ``StepResult.OK`` 成功, ``StepResult.FAIL`` 失败, ``StepResult.SKIP`` 跳过。
     """
     from scholaraio.translate import SKIP_ALL_CHUNKS_FAILED, translate_paper
 

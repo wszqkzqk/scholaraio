@@ -320,12 +320,19 @@ def download_arxiv_pdf(arxiv_ref: str, dest_dir: str | Path, *, overwrite: bool 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     if out_path.exists() and not overwrite:
         raise FileExistsError(f"文件已存在: {out_path}")
+    tmp_path = out_path.with_name(out_path.name + ".part")
+    tmp_path.unlink(missing_ok=True)
 
     url = f"https://arxiv.org/pdf/{canonical_id}.pdf"
     resp = _SESSION.get(url, timeout=30, stream=True)
     resp.raise_for_status()
-    with out_path.open("wb") as fh:
-        for chunk in resp.iter_content(chunk_size=1024 * 1024):
-            if chunk:
-                fh.write(chunk)
+    try:
+        with tmp_path.open("wb") as fh:
+            for chunk in resp.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    fh.write(chunk)
+        tmp_path.replace(out_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
     return out_path
