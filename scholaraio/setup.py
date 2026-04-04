@@ -736,7 +736,7 @@ def _wizard_keys(root: Path, lang: Lang, parser_choice: ParserChoice | None = No
         llm_local["api_key"] = key
         changed = True
 
-    # MinerU key
+    # MinerU token
     if parser_choice is None or parser_choice.needs_mineru_key:
         print(t("mineru_key_prompt", lang))
         key = _prompt_text("  > ")
