@@ -40,6 +40,11 @@ pip install ovito
 
 GPU 加速：`package gpu 4` 在输入脚本开头启用，`suffix gpu` 自动为支持的 pair_style 加 `/gpu` 后缀。
 
+并行运行约束：
+- 启动 MPI 作业时，优先使用 **LAMMPS 所在环境自带的** `mpirun/mpiexec`
+- 不要默认混用系统里的另一套 MPI launcher；如果 `lmp` 链接的 `libmpi` 与 launcher 不一致，可能出现“进程活着但无日志输出”的假启动挂起
+- 需要绑核或做 rank pinning 时，先用小规模 MPI 诊断确认启动和绑定语法，再放大到正式规模
+
 ## 何时使用
 
 适合：
@@ -74,6 +79,7 @@ scholaraio toolref show lammps fix_deform
 - 先用官方 LAMMPS 文档继续完成任务
 - 明确说明这里是 `toolref` 覆盖/排序缺口，不是用户操作错误
 - 不要让用户为了当前任务先停下来维护文档层
+- 如果官方手册没有解释清楚实际运行异常、MPI 启动问题、版本兼容或绑定语法，继续上网检索官方文档、社区讨论和已知问题，不要猜
 
 ## 核心流程
 
@@ -91,6 +97,11 @@ scholaraio toolref show lammps fix_deform
 4. 选择结构分析与输出
 5. 跑小体系/短步数 smoke test
 6. 正式运行后和文献/实验做定量对比
+
+参数出处规则：
+- 严格复现任务里，先查库内已入库论文和补充材料
+- 如果关键参数仍然缺失，需要别的论文或 supplementary 才能定死，应直接向用户明确索取，不要猜
+- 只有当文献明确允许范围选择时，才可以做工程性取值，并要说明这是“派生设置”而不是“严格复现参数”
 
 ### 势函数选择（最关键决策）
 
