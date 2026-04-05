@@ -47,6 +47,7 @@ The right mental model is to treat skills as "reusable workflows": when the user
 
 Knowledge base management:
 - `search` - When the user wants to find papers, search authors, or run keyword / semantic / hybrid retrieval, start with this skill.
+- `arxiv` - When the user wants to browse arXiv preprints, search arXiv directly, or fetch a preprint PDF into inbox or ingest, use this skill.
 - `show` - When the user wants to read paper metadata, abstract, conclusion, or full text, use this skill for progressive L1-L4 loading.
 - `enrich` - When the user wants to add TOC, conclusion, abstract, citation counts, or other enrichment fields, use this skill.
 - `ingest` - When the user wants to process inbox items, ingest PDF / Office / Markdown files, and rebuild indexes, use this skill.
