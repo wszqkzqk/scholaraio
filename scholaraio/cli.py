@@ -2677,6 +2677,7 @@ def cmd_attach_pdf(args: argparse.Namespace, cfg) -> None:
         parse_method=cfg.ingest.mineru_parse_method,
         formula_enable=cfg.ingest.mineru_enable_formula,
         table_enable=cfg.ingest.mineru_enable_table,
+        poll_timeout=cfg.ingest.mineru_poll_timeout,
     )
 
     result = None

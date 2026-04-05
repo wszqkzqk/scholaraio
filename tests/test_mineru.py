@@ -309,3 +309,31 @@ def test_plan_cloud_chunking_clamps_unknown_page_fallback_to_cloud_max(tmp_path,
 
     assert should_chunk is True
     assert chunk_size == 600
+
+
+def test_convert_pdf_cloud_skips_when_markdown_exists_in_nested_layout(tmp_path, monkeypatch):
+    pdf_path = tmp_path / "paper.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+    out_dir = tmp_path / "out"
+    nested_md = out_dir / pdf_path.stem / "index.md"
+    nested_md.parent.mkdir(parents=True)
+    nested_md.write_text("existing\n", encoding="utf-8")
+
+    monkeypatch.setattr("scholaraio.ingest.mineru.shutil.which", lambda _name: "/usr/bin/mineru-open-api")
+    monkeypatch.setattr(
+        "scholaraio.ingest.mineru._locate_cloud_markdown_output",
+        lambda _out_dir, _stem: nested_md,
+    )
+    monkeypatch.setattr(
+        "scholaraio.ingest.mineru.subprocess.run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should skip existing output")),
+    )
+
+    result = convert_pdf_cloud(
+        pdf_path,
+        ConvertOptions(output_dir=out_dir),
+        api_key="token",
+    )
+
+    assert result.success is True
+    assert result.md_path == nested_md

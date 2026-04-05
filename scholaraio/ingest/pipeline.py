@@ -1815,13 +1815,22 @@ def batch_convert_pdfs(
                 download_retries=cfg.ingest.mineru_download_retries,
                 poll_timeout=cfg.ingest.mineru_poll_timeout,
             )
-            result = _convert_long_pdf_cloud(
-                pdf_path,
-                mineru_opts,
-                api_key=api_key,
-                cloud_url=cfg.ingest.mineru_cloud_url,
-                chunk_size=chunk_size,
-            )
+            try:
+                result = _convert_long_pdf_cloud(
+                    pdf_path,
+                    mineru_opts,
+                    api_key=api_key,
+                    cloud_url=cfg.ingest.mineru_cloud_url,
+                    chunk_size=chunk_size,
+                )
+            except ImportError as exc:
+                ui(f"  {pdir.name}: 云端分片依赖缺失，转为本地回退: {exc}")
+                _run_fallback(pdir, pdf_path)
+                continue
+            except Exception as exc:
+                ui(f"  {pdir.name}: 云端分片失败，转为本地回退: {exc}")
+                _run_fallback(pdir, pdf_path)
+                continue
             if not result.success:
                 ui(f"  {pdir.name}: MinerU 失败: {result.error}")
                 _run_fallback(pdir, pdf_path)

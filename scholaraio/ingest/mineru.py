@@ -394,16 +394,18 @@ def convert_pdf_cloud(
     out_dir = opts.output_dir if opts.output_dir else pdf_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
     md_path = out_dir / (pdf_path.stem + ".md")
-    result.md_path = md_path
+    existing_md_path = _locate_cloud_markdown_output(out_dir, pdf_path.stem)
+    result.md_path = existing_md_path or md_path
 
     if opts.dry_run:
-        exists_tag = " (exists, would overwrite)" if md_path.exists() else ""
-        _log.debug("dry-run [cloud]: %s%s", md_path.name, exists_tag)
+        display_md_path = existing_md_path or md_path
+        exists_tag = " (exists, would overwrite)" if existing_md_path is not None else ""
+        _log.debug("dry-run [cloud]: %s%s", display_md_path.name, exists_tag)
         result.success = True
         return result
 
-    if md_path.exists() and not opts.force:
-        _log.debug("skip (already exists): %s", md_path.name)
+    if existing_md_path is not None and not opts.force:
+        _log.debug("skip (already exists): %s", existing_md_path.name)
         result.success = True
         return result
 
