@@ -107,7 +107,7 @@ Without one of those two options, running `scholaraio` from another project may 
 
 |  | Feature | Details |
 |--|---------|---------|
-| **PDF Parsing** | Deep structure extraction | Prefer [MinerU](https://github.com/opendatalab/MinerU) or [Docling](https://github.com/docling-project/docling) for structured Markdown. If neither is available, ScholarAIO falls back to PyMuPDF text extraction. Long PDFs (>100 pp) are auto-split and merged when MinerU is used |
+| **PDF Parsing** | Deep structure extraction | Prefer [MinerU](https://github.com/opendatalab/MinerU) or [Docling](https://github.com/docling-project/docling) for structured Markdown. If neither is available, ScholarAIO falls back to PyMuPDF text extraction. With MinerU, local parsing follows `chunk_page_limit` (default: >100 pages), while cloud parsing also respects the documented `>600 pages` and `>200MB` limits and estimates a safe chunk size when only the file-size limit is exceeded |
 | **Not Just Papers** | Any document goes in | Journal articles, theses, patents, technical reports, standards, lecture notes — four inboxes with tailored metadata handling |
 | **Hybrid Search** | Keyword + semantic fusion | Keyword + semantic embeddings → RRF ranking |
 | **Topic Discovery** | Auto-clustering | BERTopic + 6 interactive HTML visualizations — works on both your library and explore datasets |
@@ -177,9 +177,9 @@ Main config: `config.yaml` (tracked). Secrets: `config.local.yaml` (gitignored).
 | Key | Purpose | Get it |
 |-----|---------|--------|
 | LLM API key | Metadata extraction, enrichment, academic discussion | Set `llm.api_key` in `config.local.yaml`, or use env vars: `SCHOLARAIO_LLM_API_KEY` (universal), `DEEPSEEK_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY` / `GEMINI_API_KEY`. Default backend: [DeepSeek](https://platform.deepseek.com/); also supports Claude, Gemini, Ollama, and any OpenAI-compatible API |
-| `MINERU_API_KEY` | MinerU cloud PDF parsing | Free at [mineru.net](https://mineru.net/apiManage/token) or [self-host](https://github.com/opendatalab/MinerU) |
+| `MINERU_TOKEN` / `MINERU_API_KEY` | MinerU cloud PDF parsing via `mineru-open-api` | Free at [mineru.net](https://mineru.net/apiManage/token); install CLI with `pip install mineru-open-api`, or [self-host](https://github.com/opendatalab/MinerU) |
 
-> **Both are optional.** Without LLM: regex-only extraction. Without MinerU cloud/local: ScholarAIO can still fall back to Docling or PyMuPDF for PDF parsing, or you can place `.md` files in `data/inbox/` directly.
+> **Both are optional.** Without LLM: regex-only extraction. Without MinerU token / local service: ScholarAIO can still fall back to Docling or PyMuPDF for PDF parsing, or you can place `.md` files in `data/inbox/` directly.
 
 Embedding model (Qwen3-Embedding-0.6B, ~1.2 GB) auto-downloads on first use. Default source: ModelScope (no proxy needed in China). International users: set `embed.source: huggingface` in config.
 You can also override embedding source/model cache via environment variables: `SCHOLARAIO_EMBED_SOURCE`, `SCHOLARAIO_EMBED_CACHE_DIR`, `SCHOLARAIO_EMBED_MODEL`, and optional mirror `SCHOLARAIO_HF_ENDPOINT` (fallback to `HF_ENDPOINT`).
@@ -283,6 +283,8 @@ data/proceedings/    # Proceedings library (gitignored)
 data/inbox/          # Drop PDFs here for ingestion
 data/inbox-proceedings/ # Drop proceedings volumes here for dedicated ingest
 ```
+
+Proceedings only enter the proceedings workflow from `data/inbox-proceedings/`. Regular `data/inbox/` items stay on the normal paper/document path unless you move them into the dedicated proceedings inbox explicitly.
 
 Full module reference → [`CLAUDE.md`](CLAUDE.md) or [`AGENTS.md`](AGENTS.md)
 

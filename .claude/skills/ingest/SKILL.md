@@ -51,7 +51,7 @@ scholaraio pipeline <preset> [--dry-run] [--no-api] [--force] [--inspect]
    - `data/inbox-thesis/` — 学位论文（跳过 DOI 去重，自动标记 thesis）
    - `data/inbox-patent/` — 专利文献（按公开号去重，自动标记 patent，跳过 DOI 去重）
    - `data/inbox-doc/` — 非论文文档（技术报告、讲义、Word/Excel/PPT、标准文档等，跳过 DOI 去重，LLM 生成标题/摘要）
-   - `data/inbox-proceedings/` — 论文集（强制按 proceedings 处理；普通 `data/inbox/` 里也会做自动识别）
+   - `data/inbox-proceedings/` — 论文集（强制按 proceedings 处理；普通 `data/inbox/` 不再自动识别）
 
 4. 论文集（proceedings）采用半自动两阶段流程：
    - 第一阶段：`scholaraio pipeline ingest` 只负责把 PDF/MD 转成 `data/proceedings/<Volume>/proceeding.md`，并生成 `split_candidates.json`
@@ -102,7 +102,9 @@ scholaraio proceedings apply-clean <proceeding_dir> <clean_plan.json>
      - 是 thesis → 标记并入库
      - 不是 thesis → 转入 `data/pending/` 待人工确认
 
-9. 超长 PDF（>100 页）自动切分为短 PDF 分段转换后合并。
+9. 超长 PDF 会在 MinerU 转换前按需自动切分后合并：
+   - 本地 MinerU 按 `chunk_page_limit`（默认 >100 页）
+   - 云端 MinerU 同时遵循 `>600 页` 和 `>200MB` 两个限制，并在仅超大小时估算更安全的分片页数
 
 ## 示例
 

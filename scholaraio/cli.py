@@ -2653,7 +2653,15 @@ def cmd_attach_pdf(args: argparse.Namespace, cfg) -> None:
     ui(f"已复制 PDF: {dest_pdf.name}")
 
     # Convert PDF → markdown via MinerU
-    from scholaraio.ingest.mineru import ConvertOptions, check_server, convert_pdf
+    from scholaraio.ingest.mineru import (
+        ConvertOptions,
+        _convert_long_pdf,
+        _convert_long_pdf_cloud,
+        _get_pdf_page_count,
+        _plan_cloud_chunking,
+        check_server,
+        convert_pdf,
+    )
     from scholaraio.ingest.pdf_fallback import (
         convert_pdf_with_fallback,
         preferred_parser_order,
@@ -2669,6 +2677,7 @@ def cmd_attach_pdf(args: argparse.Namespace, cfg) -> None:
         parse_method=cfg.ingest.mineru_parse_method,
         formula_enable=cfg.ingest.mineru_enable_formula,
         table_enable=cfg.ingest.mineru_enable_table,
+        poll_timeout=cfg.ingest.mineru_poll_timeout,
     )
 
     result = None
@@ -2679,6 +2688,7 @@ def cmd_attach_pdf(args: argparse.Namespace, cfg) -> None:
         getattr(cfg.ingest, "pdf_fallback_order", None),
         auto_detect=fallback_auto_detect,
     )
+    local_chunk_limit = getattr(cfg.ingest, "chunk_page_limit", 100)
     if prefers_fallback_parser(getattr(cfg.ingest, "pdf_preferred_parser", "mineru")):
         ok, parser_name, fallback_err = convert_pdf_with_fallback(
             dest_pdf,
@@ -2692,20 +2702,46 @@ def cmd_attach_pdf(args: argparse.Namespace, cfg) -> None:
         ui(f"已按配置优先使用 {parser_name} 生成 paper.md")
         preferred_done = True
     elif check_server(cfg.ingest.mineru_endpoint):
-        result = convert_pdf(dest_pdf, mineru_opts)
+        page_count = _get_pdf_page_count(dest_pdf)
+        if page_count > local_chunk_limit:
+            ui(f"检测到长 PDF（{page_count} 页，超过 {local_chunk_limit} 页限制），正在分片处理...")
+            result = _convert_long_pdf(dest_pdf, mineru_opts, chunk_size=local_chunk_limit)
+        else:
+            result = convert_pdf(dest_pdf, mineru_opts)
     else:
         api_key = cfg.resolved_mineru_api_key()
         if not api_key:
-            ui("MinerU 不可达且无云 API key，改用 fallback 解析器")
+            ui("MinerU 不可达且无 MinerU token，改用 fallback 解析器")
         else:
             from scholaraio.ingest.mineru import convert_pdf_cloud
 
-            result = convert_pdf_cloud(
+            should_chunk, chunk_size, reason = _plan_cloud_chunking(
                 dest_pdf,
-                mineru_opts,
-                api_key=api_key,
-                cloud_url=cfg.ingest.mineru_cloud_url,
+                default_chunk_size=local_chunk_limit,
             )
+            if should_chunk:
+                ui(f"检测到云端需分片 PDF（{reason}），正在分片处理...")
+                try:
+                    result = _convert_long_pdf_cloud(
+                        dest_pdf,
+                        mineru_opts,
+                        api_key=api_key,
+                        cloud_url=cfg.ingest.mineru_cloud_url,
+                        chunk_size=chunk_size,
+                    )
+                except ImportError as exc:
+                    result = None
+                    ui(f"云端分片依赖缺失，尝试 fallback：{exc}。可安装 scholaraio[pdf] / pymupdf")
+                except Exception as exc:
+                    result = None
+                    ui(f"云端分片失败，尝试 fallback：{exc}")
+            else:
+                result = convert_pdf_cloud(
+                    dest_pdf,
+                    mineru_opts,
+                    api_key=api_key,
+                    cloud_url=cfg.ingest.mineru_cloud_url,
+                )
 
     if not preferred_done and (result is None or not result.success):
         err = result.error if result is not None else "MinerU unavailable"
@@ -2723,9 +2759,22 @@ def cmd_attach_pdf(args: argparse.Namespace, cfg) -> None:
     elif result is not None:
         # Move/rename output to paper.md
         if result.md_path and result.md_path != existing_md:
+            md_src = result.md_path
+            md_src_parent = md_src.parent
             if existing_md.exists():
                 existing_md.unlink()
-            shutil.move(str(result.md_path), str(existing_md))
+            shutil.move(str(md_src), str(existing_md))
+            for images_src in [md_src.parent / "images", md_src.parent / f"{md_src.stem}_images"]:
+                if images_src.is_dir():
+                    target = paper_d / "images"
+                    if images_src == target:
+                        break
+                    if target.exists():
+                        shutil.rmtree(target)
+                    shutil.move(str(images_src), str(target))
+                    break
+            if md_src_parent != paper_d and md_src_parent.is_dir() and not any(md_src_parent.iterdir()):
+                md_src_parent.rmdir()
 
     # Clean up MinerU artifacts (keep images/)
     for pattern in ["*_layout.json", "*_content_list.json", "*_origin.pdf"]:

@@ -11,14 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Semantic Scholar API key support**: Configure `ingest.s2_api_key` (or env var `S2_API_KEY`) to authenticate Semantic Scholar requests, increasing rate limits from 100 req/5min (public) to 1 req/s (authenticated); polite delay automatically reduced from 3s to 1s when key is present
 - **PDF parser benchmark harness**: Added `scholaraio/ingest/parser_matrix_benchmark.py` plus tests for comparing Docling / MinerU / PyMuPDF parser runs and configuration matrices
-- **Parser-aware setup guidance**: `scholaraio setup` and the setup skill now explain MinerU vs Docling selection, provide official deployment links, note that MinerU cloud API keys are free to apply for, and warn agent users about sandbox/network mis-detection
+- **Parser-aware setup guidance**: `scholaraio setup` and the setup skill now explain MinerU vs Docling selection, provide official deployment links, note that MinerU tokens for `mineru-open-api` are free to apply for, and warn agent users about sandbox/network mis-detection
 - **Insights analytics module coverage**: `scholaraio.insights` now owns reusable behavior-analysis helpers, with dedicated tests plus CLI smoke coverage for `scholaraio insights`
 
 ### Fixed
 
 - **Zotero LaTeX filename too long** ([#32](https://github.com/ZimoLiao/scholaraio/issues/32)): Titles containing LaTeX math (e.g. `$\mathrm{La}{\mathrm{BH}}_8$`) or HTML/MathML entities now get properly cleaned before directory naming; added 255-byte filename length limit as safety net
 - **PDF parser fallback flow**: Batch conversion and `attach-pdf` now follow the same MinerU → fallback behavior as the main ingest path; fallback assets are preserved; unsupported parser options from the previous broader design were removed so the active chain matches the current MinerU / Docling / PyMuPDF strategy
-- **Setup robustness for agents**: `setup` / `setup check` no longer fail hard when `metrics.db` is locked, parser recommendations honor an already-configured MinerU key before network probing, and interactive prompts treat EOF as empty input so agent-driven stdin does not crash the wizard
+- **MinerU cloud backend + chunking limits**: All MinerU cloud ingest entrypoints now use the `mineru-open-api` / ModelScope-backed path instead of the old raw API flow, and cloud chunk planning now respects both the 600-page and 200MB single-file limits with size-aware chunk estimation
+- **Proceedings ingest routing**: Regular `data/inbox/` items no longer auto-route into `data/proceedings/`; proceedings now enter that workflow only through the dedicated `data/inbox-proceedings/` inbox, and misclassified real-library proceedings shells were cleaned back into normal paper ingest
+- **Setup robustness for agents**: `setup` / `setup check` no longer fail hard when `metrics.db` is locked, parser recommendations honor an already-configured MinerU token before network probing, and interactive prompts treat EOF as empty input so agent-driven stdin does not crash the wizard
 - **Docs consistency**: README, README_CN, AGENTS, and CLAUDE now describe the current parser stack and setup behavior consistently
 - **arXiv ingest edge cases**: `scholaraio.sources.arxiv` no longer makes `bs4` a transitive hard dependency for normal metadata flows, and old-style arXiv IDs like `hep-th/9901001` now create parent directories correctly during PDF download
 - **Scientific runtime docs compatibility**: toolref runtime behavior, scientific skills, and published setup/docs metadata now match the refactored `toolref` facade and current extras layout
@@ -82,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Knowledge Base
 
-- PDF ingestion via MinerU (cloud API / local), with auto-splitting for long PDFs (>100 pages)
+- PDF ingestion via MinerU (local API / `mineru-open-api` cloud CLI), with auto-splitting for long PDFs (>100 pages)
 - Three inboxes: regular papers (`inbox/`), theses (`inbox-thesis/`), general documents (`inbox-doc/`)
 - DOI-based deduplication; unresolved papers held in `pending/` for manual review
 - Metadata extraction with 4 modes: regex, auto (regex + LLM fallback), robust (regex + LLM cross-check), llm

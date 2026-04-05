@@ -339,6 +339,12 @@ class TestResolvedApiKey:
         monkeypatch.setenv("MINERU_API_KEY", "mu-env")
         assert cfg.resolved_mineru_api_key() == "mu-env"
 
+    def test_mineru_token_env_wins_over_legacy_api_key_env(self, tmp_path, monkeypatch):
+        cfg = _build_config({}, tmp_path)
+        monkeypatch.setenv("MINERU_TOKEN", "new-token")
+        monkeypatch.setenv("MINERU_API_KEY", "legacy-token")
+        assert cfg.resolved_mineru_api_key() == "new-token"
+
     def test_s2_key_from_config(self, tmp_path):
         cfg = _build_config({"ingest": {"s2_api_key": "s2-cfg"}}, tmp_path)
         assert cfg.resolved_s2_api_key() == "s2-cfg"

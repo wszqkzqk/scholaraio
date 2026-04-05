@@ -12,9 +12,7 @@ from scholaraio.ingest.proceedings import (
     apply_proceedings_clean_plan,
     apply_proceedings_split_plan,
     build_proceedings_clean_candidates,
-    detect_proceedings_from_md,
     ingest_proceedings_markdown,
-    looks_like_proceedings_text,
 )
 from scholaraio.proceedings import iter_proceedings_papers
 
@@ -159,69 +157,6 @@ def test_build_proceedings_index_incremental_mode_removes_deleted_volume_rows(tm
     assert first == 2
     assert second == 0
     assert results == []
-
-
-def test_detect_proceedings_manual_mode_forces_true(tmp_path: Path):
-    md_path = tmp_path / "volume.md"
-    md_path.write_text("A perfectly ordinary paper body.", encoding="utf-8")
-
-    detected, reason = detect_proceedings_from_md(md_path, force=True)
-
-    assert detected is True
-    assert reason == "manual_inbox"
-
-
-def test_detect_proceedings_from_regular_inbox_cues(tmp_path: Path):
-    md_path = tmp_path / "volume.md"
-    md_path.write_text(
-        "# Proceedings of the IUTAM Symposium on Granular Flow\n\n"
-        "## Table of Contents\n\n"
-        "1. Wave propagation in porous media\n"
-        "2. Shock response of cellular materials\n\n"
-        "10.1000/example.1\n"
-        "10.1000/example.2\n",
-        encoding="utf-8",
-    )
-
-    detected, reason = detect_proceedings_from_md(md_path)
-
-    assert detected is True
-    assert reason in {"title_keyword", "table_of_contents", "multi_doi"}
-
-
-def test_detect_proceedings_rejects_regular_single_paper(tmp_path: Path):
-    md_path = tmp_path / "paper.md"
-    md_path.write_text(
-        "# Boundary layer instability in compressible flow\n\n"
-        "Alice Smith, Bob Wang\n\n"
-        "10.1000/example.single\n\n"
-        "This paper studies a single wave packet in compressible flow.\n",
-        encoding="utf-8",
-    )
-
-    detected, reason = detect_proceedings_from_md(md_path)
-
-    assert detected is False
-    assert reason == ""
-    assert looks_like_proceedings_text(md_path.read_text(encoding="utf-8")) is False
-
-
-def test_detect_proceedings_rejects_contents_marker_without_other_volume_signals(tmp_path: Path):
-    md_path = tmp_path / "paper.md"
-    md_path.write_text(
-        "# Boundary layer instability in compressible flow\n\n"
-        "## Contents\n\n"
-        "1. Introduction\n"
-        "2. Results\n\n"
-        "10.1000/example.single\n",
-        encoding="utf-8",
-    )
-
-    detected, reason = detect_proceedings_from_md(md_path)
-
-    assert detected is False
-    assert reason == ""
-    assert looks_like_proceedings_text(md_path.read_text(encoding="utf-8")) is False
 
 
 def test_ingest_proceedings_markdown_writes_volume_and_child_papers(tmp_path: Path):
@@ -592,45 +527,23 @@ def test_pipeline_routes_forced_proceedings_pdf_right_after_mineru(tmp_path: Pat
     assert meta["split_status"] == "pending_review"
 
 
-def test_pipeline_auto_routes_detected_proceedings_from_main_inbox(tmp_path: Path):
+def test_pipeline_regular_inbox_never_auto_routes_to_proceedings(tmp_path: Path):
     cfg = _build_config({"ingest": {"extractor": "regex"}}, tmp_path)
     cfg.ensure_dirs()
     md_path = tmp_path / "data" / "inbox" / "volume.md"
     md_path.write_text(
         "# Proceedings of the IUTAM Symposium on Granular Flow\n\n"
+        "Alice Zheng\n\n"
+        "10.1000/example.1\n\n"
         "## Table of Contents\n10.1000/example.1\n10.1000/example.2\n\n"
-        "## Paper: Wave propagation in porous media\nAlice Zheng\n10.1000/example.1\nBody\n",
+        "This regular inbox item should stay on the normal paper path unless it is placed in inbox-proceedings.\n",
         encoding="utf-8",
     )
 
     run_pipeline(["extract", "dedup", "ingest"], cfg, {"no_api": True, "include_aux_inboxes": False})
 
-    assert any((tmp_path / "data" / "proceedings").iterdir())
-    assert not any((tmp_path / "data" / "papers").iterdir())
-
-
-def test_pipeline_dry_run_proceedings_detection_does_not_write_library(tmp_path: Path, monkeypatch):
-    cfg = _build_config({"ingest": {"extractor": "regex"}}, tmp_path)
-    cfg.ensure_dirs()
-    md_path = tmp_path / "data" / "inbox" / "volume.md"
-    md_path.write_text(
-        "# Proceedings of the IUTAM Symposium on Granular Flow\n\n"
-        "## Table of Contents\n10.1000/example.1\n10.1000/example.2\n\n"
-        "## Paper: Wave propagation in porous media\nAlice Zheng\n10.1000/example.1\nBody\n",
-        encoding="utf-8",
-    )
-
-    messages: list[str] = []
-    monkeypatch.setattr(cli, "ui", lambda message="": messages.append(message))
-    monkeypatch.setattr(pipeline, "ui", lambda message="": messages.append(message))
-
-    run_pipeline(["extract", "dedup", "ingest"], cfg, {"dry_run": True, "no_api": True, "include_aux_inboxes": False})
-
+    assert any((tmp_path / "data" / "papers").iterdir())
     assert not any((tmp_path / "data" / "proceedings").iterdir())
-    joined = "\n".join(messages)
-    assert "dry-run 模式下跳过写入" in joined
-    assert "0 ingested" in joined
-    assert "1 skipped" in joined
 
 
 def test_pipeline_does_not_auto_route_thesis_inbox_to_proceedings(tmp_path: Path):

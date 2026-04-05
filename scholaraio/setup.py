@@ -103,11 +103,11 @@ _S: dict[str, dict[Lang, str]] = {
         "  按 Enter 跳过。",
     },
     "mineru_key_prompt": {
-        "en": "  MinerU cloud API key (free to apply at https://mineru.net/apiManage/token).\n"
-        "  Without it: only .md files can be ingested, PDF conversion unavailable.\n"
+        "en": "  MinerU token for `mineru-open-api extract` (free to apply at https://mineru.net/apiManage/token).\n"
+        "  Without it: ScholarAIO can still use local MinerU / Docling / PyMuPDF, but precise MinerU cloud parsing is unavailable.\n"
         "  Press Enter to skip.",
-        "zh": "  MinerU 云 API key（免费，只需去 https://mineru.net/apiManage/token 申请）。\n"
-        "  不配置：只能入库 .md 文件，不能直接处理 PDF。\n"
+        "zh": "  MinerU token（用于 `mineru-open-api extract`，免费，只需去 https://mineru.net/apiManage/token 申请）。\n"
+        "  不配置：仍可使用本地 MinerU / Docling / PyMuPDF，但不能使用 MinerU 云端精准解析。\n"
         "  按 Enter 跳过。",
     },
     "parser_choice_prompt": {
@@ -121,8 +121,12 @@ _S: dict[str, dict[Lang, str]] = {
         "zh": "  正在测试 MinerU 可用性与 Hugging Face 连通性...",
     },
     "parser_choice_auto_configured_mineru": {
-        "en": "  Existing MinerU API key detected; treat MinerU as available before network probing.",
-        "zh": "  检测到现有 MinerU API key；在网络探测前先视为 MinerU 可用。",
+        "en": "  Existing MinerU token detected; treat MinerU cloud path as available before network probing.",
+        "zh": "  检测到现有 MinerU token；在网络探测前先视为 MinerU 云路径可用。",
+    },
+    "parser_choice_auto_cli_without_token": {
+        "en": "  MinerU CLI is available, but no MinerU API token is configured yet; add one later if you want cloud mode.",
+        "zh": "  检测到 MinerU CLI 可用，但尚未配置 MinerU API Token；如需使用云端模式，请稍后在配置中填写。",
     },
     "reachability_yes": {"en": "reachable", "zh": "可达"},
     "reachability_no": {"en": "unreachable", "zh": "不可达"},
@@ -250,7 +254,7 @@ def _prompt_text(prompt: str) -> str:
 
 # (import_name, pip_name)
 _DEP_GROUPS: dict[str, list[tuple[str, str]]] = {
-    "core": [("requests", "requests"), ("yaml", "pyyaml")],
+    "core": [("requests", "requests"), ("yaml", "pyyaml"), ("mineru_open_api", "mineru-open-api")],
     "embed": [("sentence_transformers", "sentence-transformers"), ("faiss", "faiss-cpu"), ("numpy", "numpy")],
     "topics": [("bertopic", "bertopic"), ("pandas", "pandas")],
     "import": [("endnote_utils", "endnote-utils"), ("pyzotero", "pyzotero")],
@@ -438,11 +442,7 @@ def run_check(cfg: Config | None = None, lang: Lang = "zh") -> list[CheckResult]
 
 
 def _check_mineru(cfg: Config, lang: Lang) -> tuple[bool, str]:
-    """Check MinerU availability (cloud key or local server)."""
-    cloud_key = cfg.resolved_mineru_api_key()
-    if cloud_key:
-        return True, "cloud API key " + t("configured", lang)
-
+    """Check MinerU availability (local server or cloud CLI + token)."""
     try:
         import requests as _req
 
@@ -452,16 +452,25 @@ def _check_mineru(cfg: Config, lang: Lang) -> tuple[bool, str]:
     except Exception:
         pass
 
+    cloud_token = cfg.resolved_mineru_api_key()
+    cli_path = shutil.which("mineru-open-api")
+    if cloud_token and cli_path:
+        return True, f"mineru-open-api @ {cli_path} + token " + t("configured", lang)
+    if cloud_token and not cli_path:
+        if lang == "zh":
+            return False, "已配置 MinerU token，但未安装 mineru-open-api → pip install mineru-open-api"
+        return False, "MinerU token configured, but mineru-open-api is not installed → pip install mineru-open-api"
+
     if lang == "zh":
         return (
             False,
-            "未配置云 API key，且本地 MinerU 服务不可达"
-            f" → 本地部署文档: {MINERU_DOCS_URL} | Docker: {MINERU_DOCKER_URL} | 免费申请 key: {MINERU_TOKEN_URL}",
+            "未配置 MinerU token / CLI，且本地 MinerU 服务不可达"
+            f" → 安装 CLI: pip install mineru-open-api | token: {MINERU_TOKEN_URL} | 本地部署: {MINERU_DOCS_URL} | Docker: {MINERU_DOCKER_URL}",
         )
     return (
         False,
-        "cloud API key not set and local MinerU service is unreachable"
-        f" → local docs: {MINERU_DOCS_URL} | Docker: {MINERU_DOCKER_URL} | free API key: {MINERU_TOKEN_URL}",
+        "MinerU token / CLI not configured and local MinerU service is unreachable"
+        f" → install CLI: pip install mineru-open-api | token: {MINERU_TOKEN_URL} | local docs: {MINERU_DOCS_URL} | Docker: {MINERU_DOCKER_URL}",
     )
 
 
@@ -494,6 +503,30 @@ def _check_huggingface(lang: Lang) -> tuple[bool, str]:
     if lang == "zh":
         return False, "不可达 → Docling 或 Hugging Face 模型下载可能失败；可优先考虑 MinerU / ModelScope"
     return False, "unreachable → Docling or Hugging Face model downloads may fail; prefer MinerU / ModelScope"
+
+
+def _wizard_mineru_available(cfg: Config) -> tuple[bool, bool]:
+    """Detect MinerU availability for setup wizard auto recommendation.
+
+    Returns:
+        A tuple of ``(available, cloud_only)`` where ``cloud_only`` means the
+        detected path requires a MinerU token instead of local deployment.
+    """
+    try:
+        import requests as _req
+
+        r = _req.get(cfg.ingest.mineru_endpoint, timeout=2)
+        if r.status_code < 500:
+            return True, False
+    except Exception:
+        pass
+
+    cli_available = bool(shutil.which("mineru-open-api"))
+    if bool(cfg.resolved_mineru_api_key()) and cli_available:
+        return True, True
+    if cli_available and _probe_url(MINERU_TOKEN_URL):
+        return True, True
+    return False, False
 
 
 def recommend_pdf_parser(mineru_available: bool, huggingface_reachable: bool, lang: Lang) -> tuple[str, str]:
@@ -653,11 +686,12 @@ def _wizard_parser(cfg: Config, lang: Lang) -> ParserChoice:
         return ParserChoice(parser="docling", needs_mineru_key=False)
 
     print(t("parser_choice_auto", lang))
-    mineru_available = bool(cfg.resolved_mineru_api_key())
-    if mineru_available:
+    mineru_available, mineru_cloud_only = _wizard_mineru_available(cfg)
+    mineru_token_configured = bool(cfg.resolved_mineru_api_key())
+    if mineru_cloud_only and mineru_token_configured:
         print(t("parser_choice_auto_configured_mineru", lang))
-    else:
-        mineru_available = _probe_url(MINERU_TOKEN_URL)
+    elif mineru_cloud_only:
+        print(t("parser_choice_auto_cli_without_token", lang))
     hf_ok = _probe_url(HUGGINGFACE_URL)
     print(f"    MinerU: {t('availability_yes', lang) if mineru_available else t('availability_no', lang)}")
     print(f"    Hugging Face: {t('reachability_yes', lang) if hf_ok else t('reachability_no', lang)}")
@@ -731,7 +765,7 @@ def _wizard_keys(root: Path, lang: Lang, parser_choice: ParserChoice | None = No
         llm_local["api_key"] = key
         changed = True
 
-    # MinerU key
+    # MinerU token
     if parser_choice is None or parser_choice.needs_mineru_key:
         print(t("mineru_key_prompt", lang))
         key = _prompt_text("  > ")
@@ -785,11 +819,11 @@ ingest:
   extractor: robust         # auto | regex | llm | robust
   pdf_preferred_parser: mineru       # mineru | docling | pymupdf
   mineru_endpoint: http://localhost:8000
-  mineru_cloud_url: https://mineru.net/api/v4
+  mineru_cloud_url: https://mineru.net/api/v4  # mineru-open-api --base-url override for private deployments
   mineru_backend_local: pipeline      # local-only backend; keep default unless you self-host MinerU
-  mineru_model_version_cloud: pipeline # cloud PDF model_version: pipeline | vlm
+  mineru_model_version_cloud: pipeline # mineru-open-api extract --model: pipeline | vlm
   mineru_lang: ch                     # keep ch for Chinese/mixed Chinese-English PDFs; switch to en for English-only PDFs
-  mineru_parse_method: auto           # auto | txt | ocr; cloud API only maps ocr -> file.is_ocr=true
+  mineru_parse_method: auto           # auto | txt | ocr; mineru-open-api only maps ocr -> --ocr
   mineru_enable_formula: true         # only effective for pipeline / vlm
   mineru_enable_table: true           # only effective for pipeline / vlm
   abstract_llm_mode: verify # off | fallback | verify

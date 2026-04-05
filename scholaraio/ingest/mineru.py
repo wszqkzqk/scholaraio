@@ -78,12 +78,15 @@ MinerU 后端选项 (--backend)
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import logging
+import os
 import shutil
+import subprocess
 import sys
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import requests
@@ -154,7 +157,7 @@ class ConvertOptions:
         api_url: MinerU 服务地址。
         output_dir: 输出目录，为 ``None`` 时与 PDF 同目录。
         backend: MinerU 解析后端（``pipeline`` | ``vlm-auto-engine`` 等）。
-        cloud_model_version: MinerU 云 API ``model_version``（``pipeline`` | ``vlm`` | ``MinerU-HTML``）。
+        cloud_model_version: `mineru-open-api extract --model` 对应模型（``pipeline`` | ``vlm`` | ``MinerU-HTML``）。
             留空时根据 ``backend`` 做兼容映射。
         lang: OCR 语言（``ch`` | ``en`` | ``latin`` 等）。
         parse_method: 解析方式（``auto`` | ``txt`` | ``ocr``）。
@@ -374,51 +377,7 @@ def _extract_field(data, field_name):
 # ============================================================================
 
 CLOUD_API_URL = "https://mineru.net/api/v4"
-CLOUD_POLL_INTERVAL = 5  # seconds between status checks
-CLOUD_TIMEOUT = 600  # backward-compatible fallback
-
-
-def _is_retriable_request_error(exc: Exception) -> bool:
-    """Return whether a requests exception is worth retrying."""
-    if isinstance(exc, (requests.ConnectTimeout, requests.ReadTimeout, requests.Timeout, requests.ConnectionError)):
-        return True
-    if isinstance(exc, requests.HTTPError) and exc.response is not None:
-        status = exc.response.status_code
-        return status in {408, 429} or status >= 500
-    return False
-
-
-def _sleep_backoff(attempt: int) -> None:
-    time.sleep(min(2 ** max(0, attempt - 1), 8))
-
-
-def _put_with_retry(url: str, pdf_path: Path, *, timeout: int, max_retries: int) -> str | None:
-    """Upload a PDF with retry for transient failures."""
-    attempts = max(1, max_retries)
-    last_error: str | None = None
-    for attempt in range(1, attempts + 1):
-        try:
-            with open(pdf_path, "rb") as f:
-                try:
-                    put_resp = requests.put(url, data=f, timeout=timeout)
-                except requests.RequestException as exc:
-                    last_error = str(exc)
-                    if attempt < attempts and _is_retriable_request_error(exc):
-                        _sleep_backoff(attempt)
-                        continue
-                    return str(exc)
-        except OSError as exc:
-            return str(exc)
-
-        if put_resp.status_code in (200, 201):
-            return None
-        if put_resp.status_code in {408, 429} or put_resp.status_code >= 500:
-            last_error = f"HTTP {put_resp.status_code}"
-            if attempt < attempts:
-                _sleep_backoff(attempt)
-                continue
-        return f"HTTP {put_resp.status_code}"
-    return last_error
+MINERU_OPEN_API_BIN = "mineru-open-api"
 
 
 def convert_pdf_cloud(
@@ -428,175 +387,79 @@ def convert_pdf_cloud(
     api_key: str,
     cloud_url: str = CLOUD_API_URL,
 ) -> ConvertResult:
-    """通过 MinerU 云 API 将单个 PDF 转换为 Markdown。
-
-    工作流程: 获取签名上传 URL → PUT 上传 PDF → 轮询解析结果 → 下载 Markdown。
-    本地 MinerU 不可达时作为 :func:`convert_pdf` 的 fallback 使用。
-
-    Args:
-        pdf_path: PDF 文件路径。
-        opts: 转换选项（输出目录、后端、语言等，复用本地 API 的选项结构）。
-        api_key: MinerU 云 API 密钥（Bearer token）。
-        cloud_url: MinerU 云 API 基础 URL，默认 ``https://mineru.net/api/v4``。
-
-    Returns:
-        :class:`ConvertResult` 实例，包含转换结果和状态。
-    """
+    """通过 `mineru-open-api extract` 将单个 PDF 转换为 Markdown。"""
     result = ConvertResult(pdf_path=pdf_path)
     t0 = time.time()
 
     out_dir = opts.output_dir if opts.output_dir else pdf_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
     md_path = out_dir / (pdf_path.stem + ".md")
-    result.md_path = md_path
+    existing_md_path = _locate_cloud_markdown_output(out_dir, pdf_path.stem)
+    result.md_path = existing_md_path or md_path
 
     if opts.dry_run:
-        exists_tag = " (exists, would overwrite)" if md_path.exists() else ""
-        _log.debug("dry-run [cloud]: %s%s", md_path.name, exists_tag)
+        display_md_path = existing_md_path or md_path
+        exists_tag = " (exists, would overwrite)" if existing_md_path is not None else ""
+        _log.debug("dry-run [cloud]: %s%s", display_md_path.name, exists_tag)
         result.success = True
         return result
 
-    if md_path.exists() and not opts.force:
-        _log.debug("skip (already exists): %s", md_path.name)
+    if existing_md_path is not None and not opts.force:
+        _log.debug("skip (already exists): %s", existing_md_path.name)
         result.success = True
         return result
 
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    # Step 1: request signed upload URL
-    data_id = pdf_path.stem
-    model_version = _resolve_cloud_model_version(opts)
-    file_entry = _build_cloud_file_entry(pdf_path.name, data_id, opts, model_version=model_version)
-    payload = _build_cloud_payload([file_entry], opts)
-
-    try:
-        resp = requests.post(
-            f"{cloud_url}/file-urls/batch",
-            headers=headers,
-            json=payload,
-            timeout=30,
+    cli_path = shutil.which(MINERU_OPEN_API_BIN)
+    if not cli_path:
+        result.error = (
+            "未找到 mineru-open-api CLI，请先安装：`pip install mineru-open-api`，"
+            "或参考 ModelScope skill / npm / go 安装方式。"
         )
-    except requests.RequestException as e:
-        result.error = f"云 API 请求失败: {e}"
         result.elapsed_seconds = time.time() - t0
         return result
 
-    if resp.status_code != 200:
-        result.error = f"云 API HTTP {resp.status_code}: {resp.text[:200]}"
-        result.elapsed_seconds = time.time() - t0
-        return result
+    cmd = _build_cloud_cli_command(cli_path, pdf_path, out_dir, opts, cloud_url=cloud_url)
+    env = os.environ.copy()
+    if api_key:
+        env["MINERU_TOKEN"] = api_key
 
     try:
-        resp_data = resp.json()
-    except ValueError:
-        result.error = "云 API 返回非 JSON 响应"
-        result.elapsed_seconds = time.time() - t0
-        return result
-    if resp_data.get("code") != 0:
-        result.error = f"云 API 错误: {resp_data.get('msg', resp.text[:200])}"
-        result.elapsed_seconds = time.time() - t0
-        return result
-
-    batch_data = resp_data.get("data", {})
-    batch_id = batch_data.get("batch_id", "")
-    file_urls = batch_data.get("file_urls", [])
-    if not file_urls:
-        result.error = "云 API 未返回上传 URL"
-        result.elapsed_seconds = time.time() - t0
-        return result
-
-    # file_urls is a list of URL strings
-    upload_url = file_urls[0] if isinstance(file_urls[0], str) else file_urls[0].get("url", "")
-    if not upload_url:
-        result.error = "云 API 返回的上传 URL 为空"
-        result.elapsed_seconds = time.time() - t0
-        return result
-
-    # Step 2: upload PDF via PUT
-    try:
-        upload_error = _put_with_retry(
-            upload_url,
-            pdf_path,
-            timeout=DEFAULT_UPLOAD_TIMEOUT,
-            max_retries=max(1, opts.upload_retries),
+        proc = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=str(pdf_path.parent),
+            env=env,
+            timeout=max(30, int(opts.poll_timeout or DEFAULT_POLL_TIMEOUT)) + 60,
+            check=False,
         )
-        if upload_error:
-            result.error = f"PDF 上传失败: {upload_error}"
-            result.elapsed_seconds = time.time() - t0
-            return result
-    except (OSError, requests.RequestException) as e:
-        result.error = f"PDF 上传失败: {e}"
+    except subprocess.TimeoutExpired as exc:
+        result.error = f"mineru-open-api 执行超时: {exc}"
+        result.elapsed_seconds = time.time() - t0
+        return result
+    except OSError as exc:
+        result.error = f"无法启动 mineru-open-api: {exc}"
         result.elapsed_seconds = time.time() - t0
         return result
 
-    _log.debug("PDF uploaded, cloud parsing (batch_id: %s...)", batch_id[:12])
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        result.error = f"mineru-open-api exit code {proc.returncode}: {detail or 'unknown error'}"
+        result.elapsed_seconds = time.time() - t0
+        return result
 
-    # Step 3: poll for results
-    poll_headers = {"Authorization": f"Bearer {api_key}"}
-    deadline = time.time() + max(1, opts.poll_timeout or CLOUD_TIMEOUT)
+    actual_md_path = _locate_cloud_markdown_output(out_dir, pdf_path.stem)
+    if actual_md_path is None:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        result.error = f"mineru-open-api 未生成 Markdown 输出: {detail or 'missing .md file'}"
+        result.elapsed_seconds = time.time() - t0
+        return result
 
-    while time.time() < deadline:
-        time.sleep(CLOUD_POLL_INTERVAL)
-        try:
-            poll_resp = requests.get(
-                f"{cloud_url}/extract-results/batch/{batch_id}",
-                headers=poll_headers,
-                timeout=30,
-            )
-        except requests.RequestException:
-            continue
-
-        if poll_resp.status_code != 200:
-            continue
-
-        try:
-            poll_data = poll_resp.json()
-        except ValueError:
-            continue
-        if poll_data.get("code") != 0:
-            continue
-
-        extract_results = poll_data.get("data", {}).get("extract_result", [])
-        if not extract_results:
-            continue
-
-        item = extract_results[0]
-        state = item.get("state", "")
-
-        if state == "failed":
-            result.error = f"云端解析失败: {item.get('err_msg', 'unknown')}"
-            result.elapsed_seconds = time.time() - t0
-            return result
-
-        if state == "done":
-            md_content = _download_cloud_result(item, out_dir, download_retries=max(1, opts.download_retries))
-            if md_content is None:
-                result.error = f"无法从云端结果提取 Markdown。响应键: {list(item.keys())}"
-                result.elapsed_seconds = time.time() - t0
-                return result
-
-            md_path.write_text(md_content, encoding="utf-8")
-            result.success = True
-            result.md_size = len(md_content.encode("utf-8"))
-            result.elapsed_seconds = time.time() - t0
-            _log.info(
-                "-> [cloud] %s (%s, %.1fs)",
-                md_path.name,
-                _fmt_size(result.md_size),
-                result.elapsed_seconds,
-            )
-            return result
-
-        if state == "running":
-            extracted = item.get("extracted_pages", "?")
-            total = item.get("total_pages", "?")
-            _log.debug("cloud parsing... %s/%s pages", extracted, total)
-
-    result.error = f"云端解析超时（{max(1, opts.poll_timeout or CLOUD_TIMEOUT)}s）"
+    result.md_path = actual_md_path
+    result.success = True
+    result.md_size = len(actual_md_path.read_bytes())
     result.elapsed_seconds = time.time() - t0
+    _log.info("-> [cloud-cli] %s (%s, %.1fs)", actual_md_path.name, _fmt_size(result.md_size), result.elapsed_seconds)
     return result
 
 
@@ -611,334 +474,97 @@ def convert_pdfs_cloud_batch(
     cloud_url: str = CLOUD_API_URL,
     batch_size: int = _DEFAULT_CLOUD_BATCH_SIZE,
 ) -> list[ConvertResult]:
-    """通过 MinerU 云 API 批量转换 PDF 为 Markdown。
-
-    所有 PDF 在一个 batch 内提交，并行上传，统一轮询。
-    超过 ``batch_size`` 时自动分批。
-
-    Args:
-        pdf_paths: PDF 文件路径列表。
-        opts: 转换选项。
-        api_key: MinerU 云 API 密钥。
-        cloud_url: MinerU 云 API 基础 URL。
-        batch_size: 每批提交文件数上限，默认 20。可通过
-            ``config.yaml`` 的 ``ingest.mineru_batch_size`` 配置。
-
-    Returns:
-        与 ``pdf_paths`` 等长的 :class:`ConvertResult` 列表。
-    """
+    """通过 `mineru-open-api` 批量转换 PDF 为 Markdown。"""
     if not pdf_paths:
         return []
 
     # Split into chunks
     all_results: list[ConvertResult] = []
     for chunk_start in range(0, len(pdf_paths), batch_size):
-        chunk = pdf_paths[chunk_start : chunk_start + batch_size]
-        chunk_results = _convert_chunk_cloud(chunk, opts, api_key=api_key, cloud_url=cloud_url)
+        indexed_chunk = list(enumerate(pdf_paths[chunk_start : chunk_start + batch_size], start=chunk_start))
+        chunk_results = _convert_chunk_cloud(indexed_chunk, opts, api_key=api_key, cloud_url=cloud_url)
         all_results.extend(chunk_results)
     return all_results
 
 
 def _convert_chunk_cloud(
-    pdf_paths: list[Path],
+    indexed_pdf_paths: list[tuple[int, Path]],
     opts: ConvertOptions,
     *,
     api_key: str,
     cloud_url: str,
 ) -> list[ConvertResult]:
-    """Process a single batch chunk of PDFs via cloud API."""
-    import concurrent.futures
+    """Process a single batch chunk via bounded concurrent CLI invocations."""
+    max_workers = min(len(indexed_pdf_paths), max(1, int(opts.upload_workers or DEFAULT_UPLOAD_WORKERS)))
 
-    t0 = time.time()
-    out_dir = opts.output_dir if opts.output_dir else pdf_paths[0].parent
-    out_dir.mkdir(parents=True, exist_ok=True)
+    def _run_one(item: tuple[int, Path]) -> ConvertResult:
+        global_idx, pdf_path = item
+        item_opts = opts
+        if opts.output_dir is not None:
+            item_opts = replace(opts, output_dir=opts.output_dir / f"{global_idx:04d}_{pdf_path.stem}")
+        return convert_pdf_cloud(pdf_path, item_opts, api_key=api_key, cloud_url=cloud_url)
 
-    # Build per-file results and output paths
-    results: dict[str, ConvertResult] = {}
-    data_id_to_path: dict[str, Path] = {}
-    files_payload = []
-
-    for pdf_path in pdf_paths:
-        data_id = pdf_path.stem
-        md_path = out_dir / (pdf_path.stem + ".md")
-        result = ConvertResult(pdf_path=pdf_path, md_path=md_path)
-
-        if md_path.exists() and not opts.force:
-            _log.debug("skip (already exists): %s", md_path.name)
-            result.success = True
-            results[data_id] = result
-            continue
-
-        results[data_id] = result
-        data_id_to_path[data_id] = pdf_path
-        model_version = _resolve_cloud_model_version(opts)
-        files_payload.append(_build_cloud_file_entry(pdf_path.name, data_id, opts, model_version=model_version))
-
-    if not files_payload:
-        return list(results.values())
-
-    # Step 1: request signed upload URLs for all files
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    payload = _build_cloud_payload(files_payload, opts)
-
-    try:
-        resp = requests.post(
-            f"{cloud_url}/file-urls/batch",
-            headers=headers,
-            json=payload,
-            timeout=30,
-        )
-    except requests.RequestException as e:
-        for did in data_id_to_path:
-            results[did].error = f"云 API 请求失败: {e}"
-            results[did].elapsed_seconds = time.time() - t0
-        return list(results.values())
-
-    if resp.status_code != 200:
-        for did in data_id_to_path:
-            results[did].error = f"云 API HTTP {resp.status_code}: {resp.text[:200]}"
-            results[did].elapsed_seconds = time.time() - t0
-        return list(results.values())
-
-    try:
-        resp_data = resp.json()
-    except ValueError:
-        for did in data_id_to_path:
-            results[did].error = "云 API 返回非 JSON 响应"
-            results[did].elapsed_seconds = time.time() - t0
-        return list(results.values())
-
-    if resp_data.get("code") != 0:
-        for did in data_id_to_path:
-            results[did].error = f"云 API 错误: {resp_data.get('msg', resp.text[:200])}"
-            results[did].elapsed_seconds = time.time() - t0
-        return list(results.values())
-
-    batch_data = resp_data.get("data", {})
-    batch_id = batch_data.get("batch_id", "")
-    file_urls = batch_data.get("file_urls", [])
-
-    if len(file_urls) != len(files_payload):
-        for did in data_id_to_path:
-            results[did].error = f"云 API 返回 URL 数量不匹配: {len(file_urls)} vs {len(files_payload)}"
-            results[did].elapsed_seconds = time.time() - t0
-        return list(results.values())
-
-    # Step 2: parallel upload all PDFs
-    ordered_data_ids = [f["data_id"] for f in files_payload]
-
-    def _upload_one(idx: int) -> str | None:
-        did = ordered_data_ids[idx]
-        url = file_urls[idx] if isinstance(file_urls[idx], str) else file_urls[idx].get("url", "")
-        pdf_path = data_id_to_path[did]
-        return _put_with_retry(
-            url,
-            pdf_path,
-            timeout=DEFAULT_UPLOAD_TIMEOUT,
-            max_retries=max(1, opts.upload_retries),
-        )
-
-    _log.info("Uploading %d PDFs to MinerU cloud (batch %s)...", len(files_payload), batch_id[:12])
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, opts.upload_workers)) as pool:
-        upload_errors = list(pool.map(_upload_one, range(len(files_payload))))
-
-    for idx, err in enumerate(upload_errors):
-        if err:
-            did = ordered_data_ids[idx]
-            results[did].error = f"PDF 上传失败: {err}"
-            results[did].elapsed_seconds = time.time() - t0
-
-    pending_ids = {did for idx, did in enumerate(ordered_data_ids) if not upload_errors[idx]}
-    if not pending_ids:
-        return list(results.values())
-
-    _log.info("All uploaded, waiting for cloud parsing (%d files)...", len(pending_ids))
-
-    # Step 3: poll for all results
-    poll_headers = {"Authorization": f"Bearer {api_key}"}
-    deadline = time.time() + max(1, opts.poll_timeout or CLOUD_TIMEOUT)
-    done_ids: set[str] = set()
-
-    while time.time() < deadline and done_ids != pending_ids:
-        time.sleep(CLOUD_POLL_INTERVAL)
-        try:
-            poll_resp = requests.get(
-                f"{cloud_url}/extract-results/batch/{batch_id}",
-                headers=poll_headers,
-                timeout=30,
-            )
-        except requests.RequestException:
-            continue
-
-        if poll_resp.status_code != 200:
-            continue
-        try:
-            poll_data = poll_resp.json()
-        except ValueError:
-            continue
-        if poll_data.get("code") != 0:
-            continue
-
-        extract_results = poll_data.get("data", {}).get("extract_result", [])
-        running_count = 0
-        for item in extract_results:
-            did = item.get("data_id", "")
-            if did not in pending_ids or did in done_ids:
-                continue
-            state = item.get("state", "")
-
-            if state == "done":
-                # Per-file output dir for images etc.
-                file_out_dir = out_dir / did
-                file_out_dir.mkdir(parents=True, exist_ok=True)
-                md_content = _download_cloud_result(
-                    item,
-                    file_out_dir,
-                    download_retries=max(1, opts.download_retries),
-                )
-                if md_content is None:
-                    results[did].error = "无法从云端结果提取 Markdown"
-                else:
-                    md_path = results[did].md_path
-                    md_path.write_text(md_content, encoding="utf-8")
-                    # Move assets from per-file subdir to out_dir (flat)
-                    _flatten_assets(file_out_dir, out_dir, did)
-                    results[did].success = True
-                    results[did].md_size = len(md_content.encode("utf-8"))
-                    _log.info(
-                        "-> [cloud] %s (%s)",
-                        md_path.name,
-                        _fmt_size(results[did].md_size),
-                    )
-                results[did].elapsed_seconds = time.time() - t0
-                done_ids.add(did)
-
-            elif state == "failed":
-                results[did].error = f"云端解析失败: {item.get('err_msg', 'unknown')}"
-                results[did].elapsed_seconds = time.time() - t0
-                done_ids.add(did)
-
-            elif state == "running":
-                running_count += 1
-
-        if running_count and not done_ids - pending_ids:
-            done_count = len(done_ids)
-            _log.info("Cloud parsing: %d/%d done, %d running...", done_count, len(pending_ids), running_count)
-
-    # Mark timed-out files
-    for did in pending_ids - done_ids:
-        results[did].error = f"云端解析超时（{max(1, opts.poll_timeout or CLOUD_TIMEOUT)}s）"
-        results[did].elapsed_seconds = time.time() - t0
-
-    elapsed = time.time() - t0
-    ok = sum(1 for did in pending_ids if results[did].success)
-    _log.info("Batch done: %d/%d succeeded (%.1fs total)", ok, len(pending_ids), elapsed)
-
-    return list(results.values())
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+        return list(pool.map(_run_one, indexed_pdf_paths))
 
 
-def _flatten_assets(src_dir: Path, out_dir: Path, data_id: str) -> None:
-    """Move images/ and other assets from per-file subdir to out_dir, namespaced by data_id."""
-    images_src = src_dir / "images"
-    if images_src.is_dir():
-        # Move entire images dir, namespaced to avoid collisions
-        images_dst = out_dir / f"{data_id}_images"
-        if images_dst.exists():
-            import shutil
+def _build_cloud_cli_command(
+    cli_path: str,
+    pdf_path: Path,
+    out_dir: Path,
+    opts: ConvertOptions,
+    *,
+    cloud_url: str,
+) -> list[str]:
+    """Build the `mineru-open-api extract` command for a single PDF."""
+    model_version = _resolve_cloud_model_version(opts)
+    model_flag = "html" if model_version == "MinerU-HTML" else model_version
+    timeout = max(1, int(opts.poll_timeout or DEFAULT_POLL_TIMEOUT))
 
-            shutil.rmtree(str(images_dst))
-        images_src.rename(images_dst)
+    cmd = [
+        cli_path,
+        "extract",
+        str(pdf_path),
+        "-o",
+        str(out_dir),
+        "--language",
+        opts.lang,
+        "--model",
+        model_flag,
+    ]
+    if model_version in PDF_CLOUD_MODEL_VERSIONS:
+        if opts.parse_method == "ocr":
+            cmd.append("--ocr")
+        elif opts.parse_method == "txt":
+            _log.warning("mineru-open-api extract has no txt-only mode; parse_method=txt is treated as default mode")
+        cmd.append(f"--formula={'true' if opts.formula_enable else 'false'}")
+        cmd.append(f"--table={'true' if opts.table_enable else 'false'}")
+    elif opts.parse_method in {"ocr", "txt"}:
+        _log.warning("MinerU cloud model_version=%s ignores parse_method=%s", model_version, opts.parse_method)
 
-    # Move other assets (layout.json, content_list.json, origin.pdf)
-    for f in src_dir.iterdir():
-        if f.is_file():
-            dest = out_dir / f"{data_id}_{f.name}"
-            f.rename(dest)
-
-    # Clean up empty subdir
-    try:
-        src_dir.rmdir()
-    except OSError:
-        pass
+    cmd.extend(["--timeout", str(timeout)])
+    if cloud_url and cloud_url.rstrip("/") != CLOUD_API_URL.rstrip("/"):
+        cmd.extend(["--base-url", cloud_url])
+    return cmd
 
 
-def _download_cloud_result(
-    item: dict, out_dir: Path, *, download_retries: int = DEFAULT_DOWNLOAD_RETRIES
-) -> str | None:
-    """Download markdown (and images) from cloud API result.
+def _locate_cloud_markdown_output(out_dir: Path, stem: str) -> Path | None:
+    """Locate the markdown file produced by `mineru-open-api`."""
+    candidates = [
+        out_dir / f"{stem}.md",
+        out_dir / stem / f"{stem}.md",
+        out_dir / stem / "index.md",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
 
-    Tries multiple response formats: direct md_content field,
-    full_zip_url (download zip and extract all files), or markdown URLs.
-
-    CDN download bypasses HTTP proxy (domestic CDN + proxy = SSL errors).
-
-    Args:
-        item: Single extract result dict from cloud API.
-        out_dir: Directory to extract images and other assets into.
-
-    Returns:
-        Markdown text, or ``None`` on failure.
-    """
-    # Direct markdown content
-    md = item.get("md_content")
-    if isinstance(md, str) and md.strip():
-        return md
-
-    # Download zip and extract all files (md + images/)
-    zip_url = item.get("full_zip_url")
-    if zip_url:
-        attempts = max(1, download_retries)
-        for attempt in range(1, attempts + 1):
-            try:
-                import io
-                import zipfile
-
-                resp = requests.get(zip_url, timeout=DEFAULT_DOWNLOAD_TIMEOUT, proxies={"http": None, "https": None})
-                if resp.status_code == 200:
-                    md_content = None
-                    with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
-                        for name in zf.namelist():
-                            if name.endswith("/"):
-                                continue
-                            if name.endswith(".md"):
-                                md_content = zf.read(name).decode("utf-8")
-                            else:
-                                dest = out_dir / name
-                                dest.parent.mkdir(parents=True, exist_ok=True)
-                                dest.write_bytes(zf.read(name))
-                    return md_content
-                if attempt < attempts and (resp.status_code in {408, 429} or resp.status_code >= 500):
-                    _sleep_backoff(attempt)
-                    continue
-            except Exception as e:
-                if attempt < attempts and _is_retriable_request_error(e):
-                    _sleep_backoff(attempt)
-                    continue
-                _log.debug("failed to download/extract zip result: %s", e)
-                break
-
-    # Direct markdown URL (`md_url` or fallback `full_md_url`)
-    md_url = item.get("md_url") or item.get("full_md_url")
-    if md_url:
-        attempts = max(1, download_retries)
-        for attempt in range(1, attempts + 1):
-            try:
-                resp = requests.get(md_url, timeout=60, proxies={"http": None, "https": None})
-                if resp.status_code == 200:
-                    return resp.text
-                if attempt < attempts and (resp.status_code in {408, 429} or resp.status_code >= 500):
-                    _sleep_backoff(attempt)
-                    continue
-            except Exception as e:
-                if attempt < attempts and _is_retriable_request_error(e):
-                    _sleep_backoff(attempt)
-                    continue
-                _log.debug("failed to download markdown from %s: %s", md_url, e)
-                break
-
+    matches = sorted(path for path in out_dir.rglob("*.md") if path.is_file())
+    for match in matches:
+        if match.stem == stem:
+            return match
+        if match.stem == "index" and match.parent.name == stem:
+            return match
     return None
 
 
@@ -968,6 +594,59 @@ def _find_pdfs(dirpath: Path, recursive: bool = False) -> list[Path]:
 # ============================================================================
 
 DEFAULT_CHUNK_PAGES = 100
+MINERU_CLOUD_MAX_PAGES = 600
+MINERU_CLOUD_MAX_BYTES = 200 * 1024 * 1024
+
+
+def _get_pdf_size_bytes(pdf_path: Path) -> int:
+    """Return file size in bytes, or -1 when unavailable."""
+    try:
+        return pdf_path.stat().st_size
+    except OSError:
+        return -1
+
+
+def _fmt_mb(nbytes: int) -> str:
+    """Format bytes as MB with one decimal place."""
+    return f"{nbytes / (1024 * 1024):.1f} MB"
+
+
+def _plan_cloud_chunking(
+    pdf_path: Path,
+    *,
+    default_chunk_size: int = DEFAULT_CHUNK_PAGES,
+    max_pages: int = MINERU_CLOUD_MAX_PAGES,
+    max_bytes: int = MINERU_CLOUD_MAX_BYTES,
+) -> tuple[bool, int, str]:
+    """Decide whether MinerU cloud CLI should split a PDF and choose a chunk size.
+
+    Cloud extraction supports up to ``max_pages`` pages and ``max_bytes`` per document.
+    When only the file size is too large, estimate a page-based chunk size from the
+    average bytes per page. If page count is unavailable, fall back to
+    ``default_chunk_size``.
+    """
+    page_count = _get_pdf_page_count(pdf_path)
+    size_bytes = _get_pdf_size_bytes(pdf_path)
+
+    reasons: list[str] = []
+    if page_count > max_pages:
+        reasons.append(f"{page_count} pages > {max_pages}")
+    if size_bytes > max_bytes:
+        reasons.append(f"{_fmt_mb(size_bytes)} > {_fmt_mb(max_bytes)}")
+
+    if not reasons:
+        return False, max_pages, ""
+
+    chunk_size = max_pages
+    if size_bytes > max_bytes and page_count > 0:
+        avg_bytes_per_page = size_bytes / page_count
+        if avg_bytes_per_page > 0:
+            size_bound_pages = max(1, int(max_bytes // avg_bytes_per_page))
+            chunk_size = min(chunk_size, size_bound_pages)
+    elif size_bytes > max_bytes:
+        chunk_size = min(max_pages, max(1, default_chunk_size))
+
+    return True, max(1, chunk_size), "; ".join(reasons)
 
 
 def _get_pdf_page_count(pdf_path: Path) -> int:
@@ -1150,34 +829,6 @@ def _resolve_cloud_model_version(opts: ConvertOptions) -> str:
     return "pipeline"
 
 
-def _build_cloud_file_entry(
-    file_name: str, data_id: str, opts: ConvertOptions, *, model_version: str
-) -> dict[str, object]:
-    """Build a MinerU cloud file entry following official Precision API semantics."""
-    entry: dict[str, object] = {"name": file_name, "data_id": data_id}
-    if model_version in PDF_CLOUD_MODEL_VERSIONS and opts.parse_method == "ocr":
-        entry["is_ocr"] = True
-    return entry
-
-
-def _build_cloud_payload(files_payload: list[dict[str, object]], opts: ConvertOptions) -> dict[str, object]:
-    """Build a MinerU cloud payload with only officially documented fields."""
-    model_version = _resolve_cloud_model_version(opts)
-    payload: dict[str, object] = {
-        "files": files_payload,
-        "model_version": model_version,
-    }
-    if model_version in PDF_CLOUD_MODEL_VERSIONS:
-        payload["enable_formula"] = opts.formula_enable
-        payload["enable_table"] = opts.table_enable
-        payload["language"] = opts.lang
-        if opts.parse_method == "txt":
-            _log.warning("MinerU cloud API has no txt-only flag; parse_method=txt is treated as default non-OCR")
-    elif opts.parse_method in {"ocr", "txt"}:
-        _log.warning("MinerU cloud model_version=%s ignores parse_method=%s", model_version, opts.parse_method)
-    return payload
-
-
 def _convert_long_pdf(pdf_path: Path, opts: ConvertOptions, chunk_size: int = DEFAULT_CHUNK_PAGES) -> ConvertResult:
     """Handle a long PDF: split → convert each chunk → merge results.
 
@@ -1227,7 +878,7 @@ def _convert_long_pdf_cloud(
     cloud_url: str,
     chunk_size: int = DEFAULT_CHUNK_PAGES,
 ) -> ConvertResult:
-    """Handle a long PDF via cloud API: split → batch upload → merge."""
+    """Handle a long PDF via MinerU cloud CLI: split → convert → merge."""
     out_dir = opts.output_dir if opts.output_dir else pdf_path.parent
     chunks_dir = out_dir / f".{pdf_path.stem}_chunks"
 

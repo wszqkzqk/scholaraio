@@ -9,6 +9,7 @@ from scholaraio.setup import (
     ParserChoice,
     _check_docling,
     _check_huggingface,
+    _check_mineru,
     _prompt_text,
     _wizard_keys,
     _wizard_parser,
@@ -195,6 +196,7 @@ def test_check_dep_group_uses_spec_probe_for_embed_deps(monkeypatch):
 def test_check_mineru_reports_actionable_failure(monkeypatch):
     cfg = Config()
     monkeypatch.setattr(cfg, "resolved_mineru_api_key", lambda: "")
+    monkeypatch.setattr("scholaraio.setup.shutil.which", lambda _name: None)
 
     class DummyRequests:
         @staticmethod
@@ -208,8 +210,30 @@ def test_check_mineru_reports_actionable_failure(monkeypatch):
     ok, detail = _check_mineru(cfg, "zh")
 
     assert ok is False
-    assert "免费申请 key" in detail
+    assert "mineru-open-api" in detail
+    assert "token" in detail
     assert "Docker" in detail
+
+
+def test_check_mineru_prefers_local_server_even_when_token_cli_missing(monkeypatch):
+    cfg = Config()
+    monkeypatch.setattr(cfg, "resolved_mineru_api_key", lambda: "token")
+    monkeypatch.setattr("scholaraio.setup.shutil.which", lambda _name: None)
+
+    class DummyRequests:
+        @staticmethod
+        def get(*_args, **_kwargs):
+            class _Resp:
+                status_code = 200
+
+            return _Resp()
+
+    monkeypatch.setitem(__import__("sys").modules, "requests", DummyRequests)
+
+    ok, detail = _check_mineru(cfg, "en")
+
+    assert ok is True
+    assert "local server" in detail
 
 
 def test_wizard_parser_mineru_choice_skips_auto_probe(monkeypatch, capsys):
@@ -232,6 +256,10 @@ def test_wizard_parser_auto_choice_shows_advisory_not_override(monkeypatch, caps
     cfg = Config()
     answers = iter(["3", "n"])
     monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: next(answers))
+    monkeypatch.setattr(
+        "scholaraio.setup.shutil.which", lambda name: "/usr/bin/mineru-open-api" if name == "mineru-open-api" else None
+    )
+    monkeypatch.setattr(cfg, "resolved_mineru_api_key", lambda: "")
     monkeypatch.setattr("scholaraio.setup._probe_url", lambda url, timeout=2: "mineru.net" in url)
 
     choice = _wizard_parser(cfg, "zh")
@@ -239,6 +267,8 @@ def test_wizard_parser_auto_choice_shows_advisory_not_override(monkeypatch, caps
     assert choice.parser == "mineru"
     assert choice.needs_mineru_key is True
     out = capsys.readouterr().out
+    assert "检测到现有 MinerU token" not in out
+    assert "尚未配置 MinerU API Token" in out
     assert "建议优先使用 MinerU" in out
     assert "如果你已经确定要用另一个" in out
 
@@ -248,12 +278,42 @@ def test_wizard_parser_auto_prefers_configured_mineru_before_probe(monkeypatch, 
     monkeypatch.setattr(cfg, "resolved_mineru_api_key", lambda: "mineru-key")
     answers = iter(["3", "n"])
     monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: next(answers))
+    monkeypatch.setattr(
+        "scholaraio.setup.shutil.which", lambda name: "/usr/bin/mineru-open-api" if name == "mineru-open-api" else None
+    )
     monkeypatch.setattr("scholaraio.setup._probe_url", lambda *_args, **_kwargs: False)
 
     choice = _wizard_parser(cfg, "zh")
 
     assert choice.parser == "mineru"
     assert choice.needs_mineru_key is True
+    out = capsys.readouterr().out
+    assert "建议优先使用 MinerU" in out
+
+
+def test_wizard_parser_auto_detects_local_mineru_server(monkeypatch, capsys):
+    cfg = Config()
+    answers = iter(["3", "y"])
+    monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: next(answers))
+    monkeypatch.setattr("scholaraio.setup.shutil.which", lambda _name: None)
+    monkeypatch.setattr(cfg, "resolved_mineru_api_key", lambda: "")
+    monkeypatch.setattr("scholaraio.setup._probe_url", lambda *_args, **_kwargs: False)
+
+    class DummyRequests:
+        @staticmethod
+        def get(url, timeout=2):
+            class _Resp:
+                status_code = 200
+
+            assert url == cfg.ingest.mineru_endpoint
+            return _Resp()
+
+    monkeypatch.setitem(__import__("sys").modules, "requests", DummyRequests)
+
+    choice = _wizard_parser(cfg, "zh")
+
+    assert choice.parser == "mineru"
+    assert choice.needs_mineru_key is False
     out = capsys.readouterr().out
     assert "建议优先使用 MinerU" in out
 
@@ -270,6 +330,9 @@ def test_wizard_parser_auto_choice_defaults_to_cloud_key_on_eof(monkeypatch):
     cfg = Config()
     answers = iter(["3", ""])
     monkeypatch.setattr("builtins.input", lambda *_args, **_kwargs: next(answers))
+    monkeypatch.setattr(
+        "scholaraio.setup.shutil.which", lambda name: "/usr/bin/mineru-open-api" if name == "mineru-open-api" else None
+    )
     monkeypatch.setattr("scholaraio.setup._probe_url", lambda url, timeout=2: "mineru.net" in url)
 
     choice = _wizard_parser(cfg, "zh")

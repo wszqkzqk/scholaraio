@@ -51,12 +51,12 @@ llm:
 ingest:
   extractor: robust # auto | regex | llm | robust
   mineru_endpoint: http://localhost:8000 # Local MinerU API 本地 MinerU API
-  mineru_cloud_url: https://mineru.net/api/v4 # Cloud MinerU API 云端 MinerU API
-  mineru_api_key: null # → config.local.yaml or env MINERU_API_KEY
+  mineru_cloud_url: https://mineru.net/api/v4 # `mineru-open-api --base-url` override 私有部署覆盖地址
+  mineru_api_key: null # → config.local.yaml or env MINERU_TOKEN / MINERU_API_KEY
   mineru_backend_local: pipeline # local-only backend; keep default unless you self-host MinerU 本地专用，非本地部署一般不要改
-  mineru_model_version_cloud: pipeline # cloud PDF model_version: pipeline | vlm（PDF 默认用 pipeline；只在你明确需要时改成 vlm）
+  mineru_model_version_cloud: pipeline # `mineru-open-api extract --model`: pipeline | vlm（PDF 默认用 pipeline；只在你明确需要时改成 vlm）
   mineru_lang: ch # 中文或中英混排文档保持 ch；纯英文再改 en
-  mineru_parse_method: auto # auto | txt | ocr；云端精准解析 API 只有 ocr 会映射为 file.is_ocr=true
+  mineru_parse_method: auto # auto | txt | ocr；`mineru-open-api` 只有 ocr 会映射为 --ocr
   mineru_enable_formula: true # Enable formula parsing; only effective for pipeline/vlm models 仅对 pipeline/vlm 有效
   mineru_enable_table: true # Enable table parsing; only effective for pipeline/vlm models 仅对 pipeline/vlm 有效
   abstract_llm_mode: verify # off | fallback | verify

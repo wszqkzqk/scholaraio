@@ -23,8 +23,10 @@ llm:
   api_key: "sk-your-key-here"
 
 ingest:
-  mineru_api_key: "your-mineru-key"
+  mineru_api_key: "your-mineru-token"  # compatibility alias; MINERU_TOKEN is preferred
 ```
+
+You can also keep the token out of YAML entirely and set `MINERU_TOKEN` in the environment. `MINERU_API_KEY` is still accepted as a compatibility alias.
 
 ## Key Settings
 

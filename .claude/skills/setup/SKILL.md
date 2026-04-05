@@ -47,7 +47,7 @@ scholaraio setup check --lang zh
   - 若两者都可达，默认建议优先 `MinerU`
   - 若两者都不可达，优先建议 `Docling` 本地部署
   - 推荐时要明确说明：这是建议，不是替用户做决定；如果用户已有偏好，以用户选择为准
-- **MinerU key**：仅在用户选择 `MinerU` 云端方案时提示。要明确说明：`MinerU API key 是免费的，只需要注册并申请`
+- **MinerU token**：仅在用户选择 `MinerU` 云端方案时提示。要明确说明：`MinerU token 是免费的，只需要注册并申请`；优先使用 `MINERU_TOKEN`，`MINERU_API_KEY` 只保留兼容
 - 将密钥写入 `config.local.yaml`（不进 git）
 
 ### MinerU 高级字段约束
@@ -73,7 +73,7 @@ scholaraio setup check --lang zh
 - **MinerU**
   - 若推荐 `MinerU`，继续问用户是否打算本地部署
   - 若打算本地部署，给出官方 Quick Start、Docker 部署、GitHub 链接，并提示本地模型/ModelScope 方案
-  - 若不打算本地部署，明确告诉用户去申请免费 API key
+  - 若不打算本地部署，明确告诉用户去申请免费 token
 - **Docling**
   - 给出官方安装文档、CLI 文档、GitHub 链接
   - 至少提供 `pip install docling`，以及 Linux CPU-only 场景的官方安装示例

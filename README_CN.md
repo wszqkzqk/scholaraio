@@ -109,7 +109,7 @@ cp ~/.codex/scholaraio/config.yaml ~/.scholaraio/config.yaml
 
 |  | 功能 | 说明 |
 |--|------|------|
-| **PDF 解析** | 深度结构提取 | 优先使用 [MinerU](https://github.com/opendatalab/MinerU) 或 [Docling](https://github.com/docling-project/docling) 输出结构化 Markdown；若两者都不可用，ScholarAIO 会回退到 PyMuPDF 文本提取。使用 MinerU 时，超长 PDF（>100 页）会自动切分再合并 |
+| **PDF 解析** | 深度结构提取 | 优先使用 [MinerU](https://github.com/opendatalab/MinerU) 或 [Docling](https://github.com/docling-project/docling) 输出结构化 Markdown；若两者都不可用，ScholarAIO 会回退到 PyMuPDF 文本提取。使用 MinerU 时，本地后端会按 `chunk_page_limit`（默认 >100 页）自动切分，云端后端则同时遵循 `>600 页` 与 `>200MB` 两个限制并自动估算安全分片大小 |
 | **不只是论文** | 各种文档都能入 | 期刊论文、学位论文、专利、技术报告、标准、讲义——四种 inbox 分类入库，各有针对性的元数据处理 |
 | **融合检索** | 关键词 + 语义 | FTS5 + Qwen3 嵌入 + FAISS → RRF 排序融合 |
 | **主题发现** | 自动聚类 | BERTopic + 6 种交互式 HTML 可视化——同时支持主库和 explore 数据集 |
@@ -179,9 +179,9 @@ PDF → MinerU → 结构化 Markdown（图表 + LaTeX 公式保留）
 | Key | 用途 | 获取方式 |
 |-----|------|---------|
 | LLM API key | 元数据提取、内容富化、学术讨论 | 在 `config.local.yaml` 中设置 `llm.api_key`，或使用环境变量：`SCHOLARAIO_LLM_API_KEY`（通用）、`DEEPSEEK_API_KEY`、`OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`GOOGLE_API_KEY` / `GEMINI_API_KEY`。默认后端：[DeepSeek](https://platform.deepseek.com/)；同时支持 Claude、Gemini、Ollama 及任意 OpenAI 兼容 API |
-| `MINERU_API_KEY` | MinerU 云端 PDF 解析 | [mineru.net](https://mineru.net/apiManage/token) 免费申请，也可[本地部署](https://github.com/opendatalab/MinerU) |
+| `MINERU_TOKEN` / `MINERU_API_KEY` | 通过 `mineru-open-api` 走 MinerU 云端 PDF 解析 | [mineru.net](https://mineru.net/apiManage/token) 免费申请，CLI 安装：`pip install mineru-open-api`，也可[本地部署](https://github.com/opendatalab/MinerU) |
 
-> **均为可选。** 没有 LLM key：降级为纯正则提取。没有 MinerU 云端/本地能力时，ScholarAIO 仍可回退到 Docling 或 PyMuPDF 解析 PDF；也可以直接将 `.md` 放入 `data/inbox/`。
+> **均为可选。** 没有 LLM key：降级为纯正则提取。没有 MinerU token / 本地能力时，ScholarAIO 仍可回退到 Docling 或 PyMuPDF 解析 PDF；也可以直接将 `.md` 放入 `data/inbox/`。
 
 嵌入模型（Qwen3-Embedding-0.6B，约 1.2 GB）首次使用时自动下载。默认从 ModelScope 下载（国内无需代理），海外用户设置 `embed.source: huggingface`。
 
@@ -278,8 +278,12 @@ scholaraio/          # Python 包——CLI、所有核心模块
 .claude/skills/      # agent skills（AgentSkills.io 格式）
 .agents/skills/      # ↑ 符号链接，方便跨 agent 发现
 data/papers/         # 你的论文库（不进 git）
+data/proceedings/    # 论文集库（不进 git）
 data/inbox/          # 放入 PDF 即可入库
+data/inbox-proceedings/ # 显式放入论文集 PDF/MD，走专用 proceedings 流程
 ```
+
+论文集只会从 `data/inbox-proceedings/` 进入 proceedings 支线。普通 `data/inbox/` 中的文件不会再自动识别成 proceedings。
 
 完整模块参考 → [`CLAUDE.md`](CLAUDE.md) 或 [`AGENTS.md`](AGENTS.md)
 

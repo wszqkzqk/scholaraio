@@ -11,48 +11,10 @@ from scholaraio.index import build_proceedings_index
 from scholaraio.ingest.metadata import _clean_title_for_filename, _sanitize_for_filename
 from scholaraio.papers import generate_uuid
 
-_TITLE_KEYWORDS = (
-    "proceedings of",
-    "conference proceedings",
-    "symposium proceedings",
-    "workshop proceedings",
-)
-
-_TOC_PATTERNS = (
-    "table of contents",
-    "contents",
-)
-
 _DOI_RE = re.compile(r"10\.\d{4,}/[^\s)]+", re.IGNORECASE)
 _HEADING_RE = re.compile(r"^(#{1,4})\s+(.+?)\s*$")
 _TOP_LEVEL_HEADING_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
 _CONTENTS_HEADING_RE = re.compile(r"^#\s+(?:table of contents|contents)\s*$", re.MULTILINE | re.IGNORECASE)
-
-
-def looks_like_proceedings_text(text: str) -> bool:
-    lowered = text.lower()
-    if any(keyword in lowered for keyword in _TITLE_KEYWORDS):
-        return True
-    if any(marker in lowered for marker in _TOC_PATTERNS) and len(set(_DOI_RE.findall(text))) >= 2:
-        return True
-    return len(set(_DOI_RE.findall(text))) >= 3
-
-
-def detect_proceedings_from_md(md_path: Path, *, force: bool = False) -> tuple[bool, str]:
-    """Detect whether a markdown file appears to represent a proceedings volume."""
-    if force:
-        return True, "manual_inbox"
-
-    text = md_path.read_text(encoding="utf-8", errors="replace")
-    lowered = text.lower()
-
-    if any(keyword in lowered for keyword in _TITLE_KEYWORDS):
-        return True, "title_keyword"
-    if any(marker in lowered for marker in _TOC_PATTERNS) and len(set(_DOI_RE.findall(text))) >= 2:
-        return True, "table_of_contents"
-    if len(set(_DOI_RE.findall(text))) >= 3:
-        return True, "multi_doi"
-    return False, ""
 
 
 def _slugify(text: str) -> str:

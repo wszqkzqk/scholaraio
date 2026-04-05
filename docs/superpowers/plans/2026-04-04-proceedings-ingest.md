@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add proceedings-aware ingestion with a dedicated inbox, conservative auto-detection from the regular inbox, separate proceedings storage, and explicit `fsearch` support for a `proceedings` scope.
+**Goal:** Add proceedings-aware ingestion with a dedicated inbox, separate proceedings storage, and explicit `fsearch` support for a `proceedings` scope.
 
 **Architecture:** Extend the ingest pipeline with a new proceedings path parallel to thesis and document handling. Store proceedings volumes and child papers under `data/proceedings/`, keep them out of the main paper registry, and add opt-in federated retrieval through `fsearch`. Start with keyword search support for proceedings and conservative heuristic segmentation so the first release closes the workflow without destabilizing existing paper ingest.
 
@@ -108,7 +108,7 @@ git -C /home/lzmo/repos/personal/scholaraio-issue-46 add scholaraio/proceedings.
 git -C /home/lzmo/repos/personal/scholaraio-issue-46 commit -m "Add proceedings storage and keyword index helpers"
 ```
 
-## Task 3: Add proceedings detection helpers
+## Task 3: Add dedicated proceedings routing helpers
 
 **Files:**
 - Create: `scholaraio/ingest/proceedings.py`
@@ -120,36 +120,32 @@ git -C /home/lzmo/repos/personal/scholaraio-issue-46 commit -m "Add proceedings 
 Add tests for:
 
 - manual proceedings inbox forces proceedings mode
-- regular inbox markdown with proceedings cues is classified as proceedings
+- regular inbox markdown stays on the normal paper flow even if it contains proceedings-like cues
 - ordinary single-paper markdown is not classified as proceedings
 
 Use compact fixtures that include patterns like `Proceedings of`, repeated DOI/title blocks, and TOC-like headings.
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `conda run -n scholaraio python -m pytest tests/test_proceedings.py -k detect -v`
-Expected: FAIL because no proceedings detection entry point exists yet.
+Run: `conda run -n scholaraio python -m pytest tests/test_proceedings.py -k route -v`
+Expected: FAIL because no dedicated proceedings routing entry point exists yet.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Implement `scholaraio/ingest/proceedings.py` with conservative helpers:
+Implement `scholaraio/ingest/proceedings.py` with dedicated inbox helpers and writeout preparation only.
 
-- `looks_like_proceedings_text(...)`
-- `detect_proceedings_from_md(...)`
-- optional LLM-assisted detection wrapper that safely falls back to heuristics when no key is available
-
-Wire `scholaraio/ingest/pipeline.py` to call these helpers at the right point, parallel to thesis detection but without changing current thesis behavior.
+Wire `scholaraio/ingest/pipeline.py` to route `data/inbox-proceedings/` into the proceedings path without changing current thesis behavior.
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `conda run -n scholaraio python -m pytest tests/test_proceedings.py -k detect -v`
+Run: `conda run -n scholaraio python -m pytest tests/test_proceedings.py -k route -v`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git -C /home/lzmo/repos/personal/scholaraio-issue-46 add scholaraio/ingest/proceedings.py scholaraio/ingest/pipeline.py tests/test_proceedings.py
-git -C /home/lzmo/repos/personal/scholaraio-issue-46 commit -m "Add proceedings detection helpers"
+git -C /home/lzmo/repos/personal/scholaraio-issue-46 commit -m "Add dedicated proceedings routing helpers"
 ```
 
 ## Task 4: Add proceedings ingest writeout
@@ -200,7 +196,7 @@ git -C /home/lzmo/repos/personal/scholaraio-issue-46 add scholaraio/ingest/proce
 git -C /home/lzmo/repos/personal/scholaraio-issue-46 commit -m "Add proceedings ingest pipeline"
 ```
 
-## Task 5: Process dedicated proceedings inbox and auto-route from main inbox
+## Task 5: Process dedicated proceedings inbox only
 
 **Files:**
 - Modify: `scholaraio/ingest/pipeline.py`
@@ -211,7 +207,7 @@ git -C /home/lzmo/repos/personal/scholaraio-issue-46 commit -m "Add proceedings 
 Add tests that:
 
 - files placed in `data/inbox-proceedings/` go directly to proceedings ingest
-- files placed in `data/inbox/` and detected as proceedings are routed away from `data/papers/`
+- files placed in `data/inbox/` stay on the normal paper path
 - ordinary papers in `data/inbox/` still go to `data/papers/`
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -225,7 +221,7 @@ Extend the inbox phase in `scholaraio/ingest/pipeline.py`:
 
 - scan `data/inbox-proceedings/`
 - process it with proceedings-specific steps
-- add conservative auto-routing for regular inbox entries that detect as proceedings
+- do not auto-route regular inbox entries into proceedings
 - keep thesis/document inbox ordering explicit and unchanged for existing behavior
 
 - [ ] **Step 4: Run test to verify it passes**

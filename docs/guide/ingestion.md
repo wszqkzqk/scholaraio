@@ -26,7 +26,7 @@ This will:
 | Patents | `data/inbox-patent/` | Extracts publication number and deduplicates as patent |
 | Documents | `data/inbox-doc/` | Skips DOI check, LLM-generated title/abstract |
 
-Proceedings are also auto-detected conservatively from the regular `data/inbox/` path. When that happens, ScholarAIO routes the volume into `data/proceedings/` for review instead of `data/papers/`. Child papers are written under `data/proceedings/<Volume>/papers/` only after you review the split and run `scholaraio proceedings apply-split`.
+Proceedings are only routed from the dedicated `data/inbox-proceedings/` path. Regular `data/inbox/` items always stay on the normal paper/document flow unless you move them into the proceedings inbox explicitly. Child papers are written under `data/proceedings/<Volume>/papers/` only after you review the split and run `scholaraio proceedings apply-split`.
 
 ## Proceedings Search
 
