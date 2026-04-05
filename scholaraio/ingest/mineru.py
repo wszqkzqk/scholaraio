@@ -1,14 +1,16 @@
 """
-pdf_to_markdown.py — 使用本地 MinerU 服务将 PDF 转换为 Markdown
-================================================================
+ingest/mineru.py — MinerU PDF → Markdown helpers
+===============================================
 
-调用本地部署的 MinerU API (默认 http://localhost:8000) 将 PDF 文件转换为
-Markdown 格式。支持单文件转换和批量处理整个目录。
+本模块提供两层能力：
+
+1. 本地 MinerU API 转换（默认 ``http://localhost:8000``），支持单文件转换和目录批量转换
+2. `mineru-open-api` 云端 CLI 辅助函数，供 ingest pipeline / attach-pdf 等主流程调用
 
 前置条件
 --------
     需要先启动 MinerU API 服务，默认监听 http://localhost:8000。
-    可用 ``python3 pdf_to_markdown.py status`` 检查服务是否在线。
+    可用 ``python -m scholaraio.ingest.mineru status`` 检查服务是否在线。
 
 工作流程
 --------
@@ -28,27 +30,27 @@ Markdown 格式。支持单文件转换和批量处理整个目录。
 命令行用法
 ----------
     # 检查 MinerU 服务状态
-    python3 pdf_to_markdown.py status
-    python3 pdf_to_markdown.py status --api-url http://host:port
+    python -m scholaraio.ingest.mineru status
+    python -m scholaraio.ingest.mineru status --api-url http://host:port
 
     # 单文件转换
-    python3 pdf_to_markdown.py convert paper.pdf
-    python3 pdf_to_markdown.py convert paper.pdf -o ./output/       # 指定输出目录
-    python3 pdf_to_markdown.py convert paper.pdf --start-page 0 --end-page 10
-    python3 pdf_to_markdown.py convert paper.pdf --backend vlm-auto-engine
-    python3 pdf_to_markdown.py convert paper.pdf --lang en          # 英文 PDF
-    python3 pdf_to_markdown.py convert paper.pdf --parse-method ocr # 强制 OCR
-    python3 pdf_to_markdown.py convert paper.pdf --no-formula --no-table
-    python3 pdf_to_markdown.py convert paper.pdf --save-content-list
-    python3 pdf_to_markdown.py convert paper.pdf --dry-run          # 预览, 不写文件
+    python -m scholaraio.ingest.mineru convert paper.pdf
+    python -m scholaraio.ingest.mineru convert paper.pdf -o ./output/       # 指定输出目录
+    python -m scholaraio.ingest.mineru convert paper.pdf --start-page 0 --end-page 10
+    python -m scholaraio.ingest.mineru convert paper.pdf --backend vlm-auto-engine
+    python -m scholaraio.ingest.mineru convert paper.pdf --lang en          # 英文 PDF
+    python -m scholaraio.ingest.mineru convert paper.pdf --parse-method ocr # 强制 OCR
+    python -m scholaraio.ingest.mineru convert paper.pdf --no-formula --no-table
+    python -m scholaraio.ingest.mineru convert paper.pdf --save-content-list
+    python -m scholaraio.ingest.mineru convert paper.pdf --dry-run          # 预览, 不写文件
 
     # 批量处理
-    python3 pdf_to_markdown.py batch ./papers/                      # 目录下所有 PDF
-    python3 pdf_to_markdown.py batch ./papers/ -r                   # 递归子目录
-    python3 pdf_to_markdown.py batch ./papers/ -o ./md_output/      # 指定输出目录
-    python3 pdf_to_markdown.py batch ./papers/ --force              # 重新转换已有 .md 的
-    python3 pdf_to_markdown.py batch ./papers/ --dry-run            # 干跑预览
-    python3 pdf_to_markdown.py batch ./papers/ --backend pipeline --lang ch
+    python -m scholaraio.ingest.mineru batch ./papers/                      # 目录下所有 PDF
+    python -m scholaraio.ingest.mineru batch ./papers/ -r                   # 递归子目录
+    python -m scholaraio.ingest.mineru batch ./papers/ -o ./md_output/      # 指定输出目录
+    python -m scholaraio.ingest.mineru batch ./papers/ --force              # 重新转换已有 .md 的
+    python -m scholaraio.ingest.mineru batch ./papers/ --dry-run            # 干跑预览
+    python -m scholaraio.ingest.mineru batch ./papers/ --backend pipeline --lang ch
 
 公共选项 (convert / batch 共用)
 -------------------------------
