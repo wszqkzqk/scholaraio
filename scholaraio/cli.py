@@ -897,10 +897,13 @@ def cmd_translate(args: argparse.Namespace, cfg) -> None:
             cfg,
             target_lang=target_lang,
             force=args.force,
+            portable=args.portable,
             progress_callback=ui,
         )
         if tr.ok:
             ui(f"翻译完成: {tr.path}")
+            if tr.portable_path:
+                ui(f"可移植导出: {tr.portable_path}")
         else:
             from scholaraio.translate import (
                 SKIP_ALL_CHUNKS_FAILED,
@@ -928,7 +931,7 @@ def cmd_translate(args: argparse.Namespace, cfg) -> None:
             ui(_skip_messages.get(tr.skip_reason, "跳过"))
     elif args.all:
         ui(f"批量翻译 → {target_lang}")
-        stats = batch_translate(papers_dir, cfg, target_lang=target_lang, force=args.force)
+        stats = batch_translate(papers_dir, cfg, target_lang=target_lang, force=args.force, portable=args.portable)
         ui(f"完成: {stats['translated']} 已翻译 | {stats['skipped']} 跳过 | {stats['failed']} 失败")
     else:
         ui("请指定 <paper-id> 或 --all")
@@ -3463,6 +3466,11 @@ def _build_parser() -> argparse.ArgumentParser:
     p_trans.add_argument("--all", action="store_true", help="批量翻译所有论文")
     p_trans.add_argument("--lang", type=str, default=None, help="目标语言（默认读 config translate.target_lang）")
     p_trans.add_argument("--force", action="store_true", help="强制重新翻译（覆盖已有翻译）")
+    p_trans.add_argument(
+        "--portable",
+        action="store_true",
+        help="额外导出到 workspace/translation-ws/ 的可移植翻译包（复制 images/）",
+    )
 
     return parser
 

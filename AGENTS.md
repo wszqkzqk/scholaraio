@@ -181,7 +181,7 @@ Workflow:
 | `setup.py` | Environment detection + setup wizard |
 | `metrics.py` | LLM token usage + API timing |
 | `insights.py` | Research behavior analytics (hot keywords, read trends, semantic neighbor recommendations, workspace activity) |
-| `translate.py` | Paper translation (language detection + LLM chunked translation + batch translation) |
+| `translate.py` | Paper translation (language detection + concurrent chunked LLM translation + batch translation + optional portable bundle export) |
 
 CLI command reference: `scholaraio --help`
 
@@ -268,6 +268,15 @@ data/papers/
 Each paper lives in its own directory. The UUID is the internal unique identifier (written to `meta.json["id"]` and never changed).
 The directory name is the human-readable `Author-Year-Title`; rename operations only change the directory name.
 The `papers_registry` table inside `data/index.db` provides UUID <-> DOI <-> dir_name lookup in both directions.
+
+Portable translation exports are written under:
+
+```text
+workspace/translation-ws/
+└── <Author-Year-Title>/
+    ├── paper_{lang}.md
+    └── images/
+```
 
 ### `data/inbox/` Directory
 

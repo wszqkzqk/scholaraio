@@ -180,7 +180,7 @@ Skills 定义在 `.claude/skills/` 目录，遵循 [Agent Skills](https://agents
 | `setup.py` | 环境检测 + 安装向导 |
 | `metrics.py` | LLM token 用量 + API 计时 |
 | `insights.py` | 研究行为分析（热词、阅读趋势、语义近邻推荐、工作区活跃度） |
-| `translate.py` | 论文翻译（语言检测 + LLM 分块翻译 + 批量翻译） |
+| `translate.py` | 论文翻译（语言检测 + 并发分块 LLM 翻译 + 批量翻译 + 可选可移植导出） |
 
 CLI 命令一览：`scholaraio --help`
 
@@ -267,6 +267,15 @@ data/papers/
 每篇论文一个目录，UUID 作为内部唯一标识（写入 `meta.json["id"]`，永不改变）。
 目录名为人类可读的 `Author-Year-Title`，rename 只改目录名。
 `data/index.db` 中 `papers_registry` 表提供 UUID ↔ DOI ↔ dir_name 双向查找。
+
+可移植翻译导出会写到：
+
+```text
+workspace/translation-ws/
+└── <Author-Year-Title>/
+    ├── paper_{lang}.md
+    └── images/
+```
 
 ### data/inbox/ 目录
 
@@ -407,7 +416,7 @@ translate:
   auto_translate: false   # 入库时是否自动翻译
   target_lang: zh          # 目标语言（zh/en/ja/ko/de/fr/es）
   chunk_size: 4000         # 分块大小
-  concurrency: 5           # 并发翻译数
+  concurrency: 20          # 总翻译并发预算（单篇时用于 chunk 并发，批量时会在论文间分摊）
 ```
 
 ## 代码风格

@@ -11,6 +11,7 @@ ScholarAIO is a research terminal built around AI coding agents. You interact wi
 - **Topic Modeling**: BERTopic clustering with interactive HTML visualizations
 - **Citation Graph**: View references, citing papers, and shared references
 - **BibTeX Export**: Filtered export with standard citation formats
+- **Paper Translation**: Translate papers with concurrent chunked LLM calls and optional portable bundles
 - **Literature Exploration**: Multi-dimensional OpenAlex queries with isolated data
 - **Workspace Management**: Organize papers into subsets for focused work
 - **Federated Discovery**: Search your library, explore silos, and arXiv in one flow
@@ -28,6 +29,7 @@ scholaraio setup
 
 See [Installation](getting-started/installation.md) for detailed instructions.
 See [Agent Setup](getting-started/agent-setup.md) for repo-open vs plugin setup paths.
+See [Translation Guide](guide/translate.md) for translation, resume, and portable export behavior.
 See [API Reference](api/index.md) for Python module documentation.
 
 ## Two Usage Modes

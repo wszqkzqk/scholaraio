@@ -99,7 +99,7 @@ translate:
   auto_translate: false # Auto-translate non-target-language papers during pipeline ingest 是否在入库时自动翻译
   target_lang: zh # Target language code 目标语言代码
   chunk_size: 4000 # Max chars per translation chunk 分块翻译最大字符数
-  concurrency: 5 # Concurrent translation workers 并发翻译数
+  concurrency: 20 # Total translation concurrency budget; single-paper uses it for chunk parallelism, batch mode splits it across papers 总翻译并发预算
 
 # Zotero integration Zotero 集成
 zotero:

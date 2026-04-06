@@ -40,3 +40,10 @@
         - meta_path
         - md_path
         - iter_paper_dirs
+
+::: scholaraio.translate
+    options:
+      members:
+        - translate_paper
+        - batch_translate
+        - detect_language

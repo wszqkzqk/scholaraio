@@ -156,7 +156,7 @@ class TestBuildConfig:
         assert cfg.translate.auto_translate is False
         assert cfg.translate.target_lang == "zh"
         assert cfg.translate.chunk_size == 4000
-        assert cfg.translate.concurrency == 5
+        assert cfg.translate.concurrency == 20
 
     def test_zotero_library_type_default_and_override(self, tmp_path):
         cfg = _build_config({}, tmp_path)

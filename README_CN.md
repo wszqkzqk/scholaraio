@@ -220,6 +220,7 @@ scholaraio enrich-l3          提取结论段
 scholaraio backfill-abstract  补全缺失摘要
 scholaraio refetch            重新查询引用量
 scholaraio translate PAPER    将论文 Markdown 翻译到目标语言
+scholaraio translate PAPER --portable  额外导出带图片的可移植翻译包到 workspace/translation-ws/
 ```
 
 **引用图谱**

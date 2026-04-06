@@ -233,13 +233,13 @@ class TranslateConfig:
         auto_translate: 入库时是否自动翻译非目标语言的论文。
         target_lang: 翻译目标语言代码（``"zh"`` | ``"en"`` 等）。
         chunk_size: 分块翻译时每块最大字符数（避免超 LLM token 限制）。
-        concurrency: 并发翻译数。
+        concurrency: 总翻译并发预算（单篇时用于 chunk 并发，批量时会在论文间分摊）。
     """
 
     auto_translate: bool = False
     target_lang: str = "zh"
     chunk_size: int = 4000
-    concurrency: int = 5
+    concurrency: int = 20
 
 
 @dataclass
@@ -311,6 +311,11 @@ class Config:
         """BERTopic 模型保存目录的绝对路径。"""
         return (self._root / self.topics.model_dir).resolve()
 
+    @property
+    def workspace_dir(self) -> Path:
+        """工作区根目录的绝对路径。"""
+        return (self._root / "workspace").resolve()
+
     def ensure_dirs(self) -> None:
         """创建运行所需的目录（data/papers, data/inbox, data/pending, workspace 等）。"""
         for d in (
@@ -322,7 +327,7 @@ class Config:
             self._root / "data" / "inbox-doc",
             self._root / "data" / "pending",
             self._root / "data" / "proceedings",
-            self._root / "workspace",
+            self.workspace_dir,
             self.log_file.parent,
             self.metrics_db_path.parent,
         ):
@@ -684,7 +689,7 @@ def _build_config(data: dict, root: Path) -> Config:
         auto_translate=bool(translate_data.get("auto_translate", False)),
         target_lang=translate_data.get("target_lang", "zh"),
         chunk_size=int(translate_data.get("chunk_size", 4000)),
-        concurrency=max(1, int(translate_data.get("concurrency", 5))),
+        concurrency=max(1, int(translate_data.get("concurrency", 20))),
     )
 
     zotero_data = data.get("zotero", {}) or {}

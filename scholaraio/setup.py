@@ -921,7 +921,7 @@ translate:
   auto_translate: false
   target_lang: zh
   chunk_size: 4000
-  concurrency: 5
+  concurrency: 20
 
 zotero:
   library_type: user

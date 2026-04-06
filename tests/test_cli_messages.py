@@ -326,6 +326,32 @@ class TestFederatedArxivPresence:
 
 
 class TestTranslateCliProgress:
+    def test_cmd_translate_reports_portable_export_path(self, tmp_papers, monkeypatch):
+        messages: list[str] = []
+        monkeypatch.setattr(cli, "ui", messages.append)
+        monkeypatch.setattr(cli, "_resolve_paper", lambda paper_id, cfg: tmp_papers / paper_id)
+        monkeypatch.setattr(
+            "scholaraio.translate.translate_paper",
+            lambda *args, **kwargs: TranslateResult(
+                path=(tmp_papers / "Smith-2023-Turbulence" / "paper_zh.md"),
+                portable_path=(
+                    tmp_papers.parent / "workspace" / "translation-ws" / "Smith-2023-Turbulence" / "paper_zh.md"
+                ),
+            ),
+        )
+
+        cfg = SimpleNamespace(
+            papers_dir=tmp_papers,
+            translate=SimpleNamespace(target_lang="zh"),
+            workspace_dir=tmp_papers.parent / "workspace",
+        )
+        args = Namespace(paper_id="Smith-2023-Turbulence", lang="zh", force=True, all=False, portable=True)
+
+        cli.cmd_translate(args, cfg)
+
+        assert any("翻译完成:" in m for m in messages)
+        assert any("可移植导出:" in m and "translation-ws" in m for m in messages)
+
     def test_cmd_translate_reports_resumable_partial_progress(self, tmp_papers, monkeypatch):
         messages: list[str] = []
         monkeypatch.setattr(cli, "ui", messages.append)
@@ -344,7 +370,7 @@ class TestTranslateCliProgress:
             papers_dir=tmp_papers,
             translate=SimpleNamespace(target_lang="zh"),
         )
-        args = Namespace(paper_id="Smith-2023-Turbulence", lang="zh", force=True, all=False)
+        args = Namespace(paper_id="Smith-2023-Turbulence", lang="zh", force=True, all=False, portable=False)
 
         try:
             cli.cmd_translate(args, cfg)

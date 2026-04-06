@@ -221,6 +221,7 @@ scholaraio enrich-l3          Extract conclusions
 scholaraio backfill-abstract  Backfill missing abstracts
 scholaraio refetch            Re-fetch citation counts from APIs
 scholaraio translate PAPER    Translate markdown to a target language
+scholaraio translate PAPER --portable  Export a portable translation bundle with images under workspace/translation-ws/
 ```
 
 **Citation Graph**
