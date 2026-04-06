@@ -10,7 +10,6 @@
   <!-- ===== 连接线（最底层） ===== -->
   <line x1='193' y1='280' x2='290' y2='280'
         stroke='#8A7158' stroke-width='4' stroke-linecap='round'/>
-
   <line x1='404' y1='410' x2='404' y2='466'
         stroke='#8A7158' stroke-width='4' stroke-linecap='round'/>
   <line x1='716' y1='410' x2='716' y2='466'
@@ -21,11 +20,11 @@
   <!-- ===== 标题 ===== -->
   <text x='640' y='84' font-size='38' font-weight='600' fill='#6D5B4B'
         text-anchor='middle' dominant-baseline='middle'
-        font-family="Georgia, 'Times New Roman', serif">
+        font-family="'Tiempos Headline', 'Tiempos Text', Georgia, 'Times New Roman', serif">
     A research infrastructure for AI agents
   </text>
 
-  <!-- ===== container ===== -->
+  <!-- container -->
   <rect x='260' y='150' width='900' height='260' rx='38'
         fill='#FCFAF6' stroke='#8A7158' stroke-width='2.1'/>
 
@@ -49,32 +48,56 @@
   <rect x='884' y='466' width='288' height='100' rx='24'
         fill='#F7F1E7' stroke='#8A7158' stroke-width='2.4' filter='url(#shadow)'/>
 
-  <!-- ===== 文本 ===== -->
+  <!-- 文本 -->
   <text x='110.5' y='280' font-size='40' font-weight='700' fill='#3C2F24'
         text-anchor='middle' dominant-baseline='middle'
-        font-family="Georgia, 'Times New Roman', serif">User</text>
+        font-family="'Tiempos Headline', 'Tiempos Text', Georgia, 'Times New Roman', serif">
+    User
+  </text>
 
   <text x='410' y='280' font-size='40' font-weight='700' fill='#3C2F24'
         text-anchor='middle' dominant-baseline='middle'
-        font-family="Georgia, 'Times New Roman', serif">Agent</text>
+        font-family="'Tiempos Headline', 'Tiempos Text', Georgia, 'Times New Roman', serif">
+    Agent
+  </text>
 
   <text x='840' y='280' font-size='64' font-weight='700' fill='#FFFDF8'
         text-anchor='middle' dominant-baseline='middle'
-        font-family="Georgia, 'Times New Roman', serif">ScholarAIO</text>
+        font-family="'Tiempos Headline', 'Tiempos Text', Georgia, 'Times New Roman', serif">
+    ScholarAIO
+  </text>
 
   <text x='404' y='499' font-size='31' font-weight='700' fill='#3C2F24'
-        text-anchor='middle' dominant-baseline='middle'>Writing</text>
+        text-anchor='middle' dominant-baseline='middle'
+        font-family="'Tiempos Text', Georgia, 'Times New Roman', serif">
+    Writing
+  </text>
   <text x='404' y='535' font-size='31' font-weight='700' fill='#3C2F24'
-        text-anchor='middle' dominant-baseline='middle'>&amp; Coding</text>
+        text-anchor='middle' dominant-baseline='middle'
+        font-family="'Tiempos Text', Georgia, 'Times New Roman', serif">
+    &amp; Coding
+  </text>
 
   <text x='716' y='499' font-size='31' font-weight='700' fill='#3C2F24'
-        text-anchor='middle' dominant-baseline='middle'>Literature</text>
+        text-anchor='middle' dominant-baseline='middle'
+        font-family="'Tiempos Text', Georgia, 'Times New Roman', serif">
+    Literature
+  </text>
   <text x='716' y='535' font-size='31' font-weight='700' fill='#3C2F24'
-        text-anchor='middle' dominant-baseline='middle'>&amp; Knowledge</text>
+        text-anchor='middle' dominant-baseline='middle'
+        font-family="'Tiempos Text', Georgia, 'Times New Roman', serif">
+    &amp; Knowledge
+  </text>
 
   <text x='1028' y='499' font-size='31' font-weight='700' fill='#3C2F24'
-        text-anchor='middle' dominant-baseline='middle'>Scientific</text>
+        text-anchor='middle' dominant-baseline='middle'
+        font-family="'Tiempos Text', Georgia, 'Times New Roman', serif">
+    Scientific
+  </text>
   <text x='1028' y='535' font-size='31' font-weight='700' fill='#3C2F24'
-        text-anchor='middle' dominant-baseline='middle'>Tools &amp; Docs</text>
+        text-anchor='middle' dominant-baseline='middle'
+        font-family="'Tiempos Text', Georgia, 'Times New Roman', serif">
+    Tools &amp; Docs
+  </text>
 
 </svg>
