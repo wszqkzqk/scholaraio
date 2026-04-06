@@ -30,6 +30,7 @@ scholaraio setup
 See [Installation](getting-started/installation.md) for detailed instructions.
 See [Agent Setup](getting-started/agent-setup.md) for repo-open vs plugin setup paths.
 See [Translation Guide](guide/translate.md) for translation, resume, and portable export behavior.
+See [Insights Guide](guide/insights.md) for reading/search behavior analytics.
 See [API Reference](api/index.md) for Python module documentation.
 
 ## Two Usage Modes

@@ -136,6 +136,7 @@ def _resolve_model_path(model_name: str, cache_dir: str, source: str) -> str | N
         from modelscope import snapshot_download
     except ImportError:
         return None
+    logging.getLogger("modelscope").setLevel(logging.ERROR)
 
     # Check if already cached locally
     try:

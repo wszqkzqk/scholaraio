@@ -92,3 +92,13 @@
         - list_explore_libs
         - explore_db_path
         - validate_explore_name
+
+::: scholaraio.insights
+    options:
+      members:
+        - extract_hot_keywords
+        - aggregate_most_read_titles
+        - build_weekly_read_trend
+        - recent_unique_read_names
+        - recommend_unread_neighbors
+        - list_workspace_counts
