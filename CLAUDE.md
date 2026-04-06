@@ -163,7 +163,7 @@ Workflow:
 | `ingest/mineru.py` | PDF -> MinerU Markdown (local API / `mineru-open-api` cloud CLI) |
 | `ingest/pdf_fallback.py` | PDF fallback parsing (Docling / PyMuPDF) |
 | `ingest/extractor.py` | Metadata extraction (four modes: regex / auto / robust / llm) |
-| `ingest/metadata/` | API completion (Crossref / S2 / OpenAlex), JSON output, file renaming |
+| `ingest/metadata/` | API completion (Crossref / S2 / OpenAlex) + abstract backfill + document metadata generation + JSON output + file renaming |
 | `ingest/pipeline.py` | Composable ingest pipeline (DOI / patent publication number dedup + pending + external-import batch conversion) |
 | `index.py` | Keyword full-text search + papers_registry + citation graph |
 | `vectors.py` | Semantic vectors + incremental indexing + GPU-adaptive batching |

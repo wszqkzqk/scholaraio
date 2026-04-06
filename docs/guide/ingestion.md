@@ -53,3 +53,20 @@ scholaraio import-endnote library.xml
 # From Zotero
 scholaraio import-zotero --api-key KEY --library-id ID
 ```
+
+## Metadata Maintenance
+
+After papers are already in `data/papers/`, the metadata subpackage also powers two maintenance flows:
+
+```bash
+# Backfill missing abstracts from paper.md, with optional DOI-page fetch
+scholaraio backfill-abstract
+scholaraio backfill-abstract --doi-fetch
+
+# Re-fetch citation counts and bibliographic details from APIs
+scholaraio refetch --all
+scholaraio refetch "<paper-id>"
+```
+
+- `backfill-abstract` fills missing abstracts from local Markdown, and can prefer official publisher abstracts when `--doi-fetch` is enabled.
+- `refetch` re-runs Crossref / Semantic Scholar / OpenAlex enrichment for already ingested papers.

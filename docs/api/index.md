@@ -114,3 +114,17 @@
     options:
       members:
         - get_extractor
+
+::: scholaraio.ingest.metadata
+    options:
+      members:
+        - PaperMetadata
+        - enrich_metadata
+        - extract_abstract_from_md
+        - fetch_abstract_by_doi
+        - backfill_abstracts
+        - generate_new_stem
+        - metadata_to_dict
+        - refetch_metadata
+        - rename_paper
+        - write_metadata_json
