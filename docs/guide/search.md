@@ -31,10 +31,10 @@ Combines keyword and semantic results using Reciprocal Rank Fusion (RRF).
 ### Federated Search
 
 ```bash
-scholaraio fsearch "wall turbulence" --scope main,explore:*,arxiv
+scholaraio fsearch "wall turbulence" --scope main,proceedings,explore:*,arxiv
 ```
 
-Searches across the main library, one or more `explore` silos, and arXiv in one command.
+Searches across the main library, proceedings, one or more `explore` silos, and arXiv in one command.
 
 ### Author Search
 

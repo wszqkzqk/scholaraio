@@ -6,7 +6,14 @@
         - build_index
         - build_proceedings_index
         - search
+        - search_author
+        - top_cited
+        - unified_search
         - search_proceedings
+        - lookup_paper
+        - get_references
+        - get_citing_papers
+        - get_shared_references
 
 ::: scholaraio.loader
     options:
