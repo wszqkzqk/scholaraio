@@ -62,6 +62,17 @@
         - build_vectors
         - vsearch
 
+::: scholaraio.topics
+    options:
+      members:
+        - build_topics
+        - load_model
+        - get_topic_overview
+        - get_topic_papers
+        - get_outliers
+        - reduce_topics_to
+        - merge_topics_by_ids
+
 ::: scholaraio.translate
     options:
       members:

@@ -57,6 +57,7 @@ import argparse
 import concurrent.futures
 import json
 import logging
+import shutil
 import sys
 import tempfile
 import time
@@ -1173,6 +1174,8 @@ def cmd_topics(args: argparse.Namespace, cfg) -> None:
 
     if args.build or args.rebuild:
         min_ts = args.min_topic_size if args.min_topic_size is not None else cfg.topics.min_topic_size
+        if args.rebuild and model_dir.exists():
+            shutil.rmtree(model_dir, ignore_errors=True)
         ui(f"{'重建' if args.rebuild else '构建'}主题模型...")
         model = build_topics(
             cfg.index_db,
@@ -3212,8 +3215,8 @@ def _build_parser() -> argparse.ArgumentParser:
     # --- topics ---
     p_topics = sub.add_parser("topics", help="BERTopic 主题建模与探索")
     p_topics.set_defaults(func=cmd_topics)
-    p_topics.add_argument("--build", action="store_true", help="构建主题模型（增量）")
-    p_topics.add_argument("--rebuild", action="store_true", help="清空后重建主题模型")
+    p_topics.add_argument("--build", action="store_true", help="构建主题模型")
+    p_topics.add_argument("--rebuild", action="store_true", help="清空旧模型目录后重建主题模型")
     p_topics.add_argument("--reduce", type=int, default=None, metavar="N", help="快速合并主题到 N 个（不重新聚类）")
     p_topics.add_argument(
         "--merge", type=str, default=None, metavar="IDS", help="手动合并主题，格式: 1,6,14+3,5（用+分隔组）"
