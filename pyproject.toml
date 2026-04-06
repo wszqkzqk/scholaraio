@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "scholaraio"
 version = "1.3.0"
 description = "Scholar All-In-One — local academic literature explorer powered by AI"
+readme = {file = "README.md", content-type = "text/markdown"}
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
@@ -91,6 +92,8 @@ scholaraio = "scholaraio.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
+include = ["scholaraio*"]
+namespaces = false
 
 # ---------- ruff ----------
 [tool.ruff]
