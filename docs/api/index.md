@@ -56,6 +56,12 @@
         - iter_proceedings_dirs
         - iter_proceedings_papers
 
+::: scholaraio.vectors
+    options:
+      members:
+        - build_vectors
+        - vsearch
+
 ::: scholaraio.translate
     options:
       members:
