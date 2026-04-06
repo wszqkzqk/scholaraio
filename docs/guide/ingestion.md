@@ -10,7 +10,7 @@ scholaraio pipeline ingest
 
 This will:
 
-1. Convert PDFs to Markdown (via MinerU)
+1. Convert PDFs to Markdown (MinerU first, then Docling / PyMuPDF fallback when needed)
 2. Extract metadata (regex + LLM)
 3. Query APIs for completeness (Crossref, Semantic Scholar, OpenAlex)
 4. Deduplicate by DOI
@@ -38,9 +38,11 @@ Proceedings child papers are not included in default main-library search. Use fe
 scholaraio fsearch granular damping --scope proceedings
 ```
 
-## Skip MinerU
+ScholarAIO prefers MinerU when available, but the live ingest path does not depend on MinerU alone. If MinerU is unavailable or fails, the fallback parser chain is `Docling -> PyMuPDF`.
 
-Already have Markdown? Place `.md` files directly in the inbox — MinerU conversion is skipped.
+## Skip PDF Parsing
+
+Already have Markdown? Place `.md` files directly in the inbox — PDF parsing is skipped entirely.
 
 ## Pending Papers
 

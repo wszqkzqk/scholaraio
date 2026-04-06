@@ -5,6 +5,22 @@
 - Python 3.10+
 - Git
 
+## Install from PyPI
+
+```bash
+# Core installation
+pip install scholaraio
+
+# Full installation (embed + topics + import + pdf + office + draw)
+pip install "scholaraio[full]"
+```
+
+Then run:
+
+```bash
+scholaraio setup
+```
+
 ## Install from Source
 
 ```bash
@@ -17,6 +33,8 @@ pip install -e .
 # Full installation (embed + topics + import + pdf + office + draw)
 pip install -e ".[full]"
 ```
+
+Use the source install path when you want to inspect the codebase, edit the package locally, or contribute changes upstream.
 
 ## Optional Dependencies
 
@@ -50,7 +68,7 @@ scholaraio setup check
 - core setup items: dependency groups, `config.yaml`, LLM key, MinerU / Docling availability, parser recommendation, `contact_email`, and directory state
 - optional advanced items: Semantic Scholar API key and Zotero API key
 
-Current setup guidance prefers **MinerU first** whenever a MinerU path is available (local service or `mineru-open-api` + token). `Docling` remains the fallback when MinerU is not usable or when the user explicitly prefers it.
+Current setup guidance prefers **MinerU first** whenever a MinerU path is available (local service or `mineru-open-api` + token). `Docling` and then PyMuPDF remain the fallback chain when MinerU is not usable or when the user explicitly prefers a lighter parser path.
 
 Cost transparency:
 
