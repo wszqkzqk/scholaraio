@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Qwen agent support**: Added `.qwen/skills` symlink to `.claude/skills/` so Qwen-based agents can discover ScholarAIO skills out of the box
+
 ## [1.3.0] — 2026-04-06
 
 ### Added
