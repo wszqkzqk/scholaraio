@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **OpenAI-compatible embedding backend support**: Added `embed.provider` config with `local` / `openai-compat` / `none` options; cloud API supports configurable `api_base`, `api_key`, `api_timeout`, `batch_size`, and `max_retries`; `provider=none` disables embeddings gracefully and falls back to keyword-only search
+
 ## [1.3.0] — 2026-04-06
 
 ### Added
